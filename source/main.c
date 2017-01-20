@@ -36,21 +36,41 @@ struct cube_vertex {
 	vector4f color;
 };
 
+struct phong_material {
+	vector3f ambient;
+	vector3f diffuse;
+	vector3f specular;
+	float shininess;
+};
+
+struct light {
+	vector3f position;
+	vector3f color;
+};
+
+struct phong_material_gxm_params {
+	const SceGxmProgramParameter *ambient;
+	const SceGxmProgramParameter *diffuse;
+	const SceGxmProgramParameter *specular;
+	const SceGxmProgramParameter *shininess;
+};
+
+struct light_gxm_params {
+	const SceGxmProgramParameter *position;
+	const SceGxmProgramParameter *color;
+};
+
 struct display_queue_callback_data {
 	void *addr;
 };
 
 extern unsigned char _binary_clear_v_gxp_start;
 extern unsigned char _binary_clear_f_gxp_start;
-//extern unsigned char _binary_color_v_gxp_start;
-//extern unsigned char _binary_color_f_gxp_start;
 extern unsigned char _binary_cube_v_gxp_start;
 extern unsigned char _binary_cube_f_gxp_start;
 
 static const SceGxmProgram *const gxm_program_clear_v = (SceGxmProgram *)&_binary_clear_v_gxp_start;
 static const SceGxmProgram *const gxm_program_clear_f = (SceGxmProgram *)&_binary_clear_f_gxp_start;
-//static const SceGxmProgram *const gxm_program_color_v = (SceGxmProgram *)&_binary_color_v_gxp_start;
-//static const SceGxmProgram *const gxm_program_color_f = (SceGxmProgram *)&_binary_color_f_gxp_start;
 static const SceGxmProgram *const gxm_program_cube_v = (SceGxmProgram *)&_binary_cube_v_gxp_start;
 static const SceGxmProgram *const gxm_program_cube_f = (SceGxmProgram *)&_binary_cube_f_gxp_start;
 
@@ -98,8 +118,26 @@ static const SceGxmProgramParameter *gxm_cube_vertex_program_color_param;
 static const SceGxmProgramParameter *gxm_cube_vertex_program_u_mvp_matrix_param;
 static const SceGxmProgramParameter *gxm_cube_fragment_program_u_modelview_matrix_param;
 static const SceGxmProgramParameter *gxm_cube_fragment_program_u_normal_matrix_param;
+static struct phong_material_gxm_params gxm_cube_fragment_program_phong_material_params;
+static struct light_gxm_params gxm_cube_fragment_program_light_params;
 static SceGxmVertexProgram *gxm_cube_vertex_program_patched;
 static SceGxmFragmentProgram *gxm_cube_fragment_program_patched;
+
+static void set_vertex_default_uniform_data(const SceGxmProgramParameter *param,
+	unsigned int component_count, const void *data)
+{
+	void *uniform_buffer;
+	sceGxmReserveVertexDefaultUniformBuffer(gxm_context, &uniform_buffer);
+	sceGxmSetUniformDataF(uniform_buffer, param, 0, component_count, data);
+}
+
+static void set_fragment_default_uniform_data(const SceGxmProgramParameter *param,
+	unsigned int component_count, const void *data)
+{
+	void *uniform_buffer;
+	sceGxmReserveFragmentDefaultUniformBuffer(gxm_context, &uniform_buffer);
+	sceGxmSetUniformDataF(uniform_buffer, param, 0, component_count, data);
+}
 
 static void *gpu_alloc_map(SceKernelMemBlockType type, SceGxmMemoryAttribFlags gpu_attrib, size_t size, SceUID *uid)
 {
@@ -465,6 +503,20 @@ int main(int argc, char *argv[])
 	gxm_cube_fragment_program_u_normal_matrix_param = sceGxmProgramFindParameterByName(
 		cube_fragment_program, "u_normal_matrix");
 
+	gxm_cube_fragment_program_phong_material_params.ambient = sceGxmProgramFindParameterByName(
+		cube_fragment_program, "u_material.ambient");
+	gxm_cube_fragment_program_phong_material_params.diffuse = sceGxmProgramFindParameterByName(
+		cube_fragment_program, "u_material.diffuse");
+	gxm_cube_fragment_program_phong_material_params.specular = sceGxmProgramFindParameterByName(
+		cube_fragment_program, "u_material.specular");
+	gxm_cube_fragment_program_phong_material_params.shininess = sceGxmProgramFindParameterByName(
+		cube_fragment_program, "u_material.shininess");
+
+	gxm_cube_fragment_program_light_params.position = sceGxmProgramFindParameterByName(
+		cube_fragment_program, "u_light.position");
+	gxm_cube_fragment_program_light_params.color = sceGxmProgramFindParameterByName(
+		cube_fragment_program, "u_light.color");
+
 	SceGxmVertexAttribute cube_vertex_attributes[3];
 	SceGxmVertexStream cube_vertex_stream;
 	cube_vertex_attributes[0].streamIndex = 0;
@@ -510,27 +562,27 @@ int main(int argc, char *argv[])
 	#define CUBE_SIZE 1.0f
 
 	static const vector3f cube_vertices[] = {
-		{-CUBE_SIZE, +CUBE_SIZE, +CUBE_SIZE},
-		{-CUBE_SIZE, -CUBE_SIZE, +CUBE_SIZE},
-		{+CUBE_SIZE, +CUBE_SIZE, +CUBE_SIZE},
-		{+CUBE_SIZE, -CUBE_SIZE, +CUBE_SIZE},
-		{+CUBE_SIZE, +CUBE_SIZE, -CUBE_SIZE},
-		{+CUBE_SIZE, -CUBE_SIZE, -CUBE_SIZE},
-		{-CUBE_SIZE, +CUBE_SIZE, -CUBE_SIZE},
-		{-CUBE_SIZE, -CUBE_SIZE, -CUBE_SIZE}
+		{.x = -CUBE_SIZE, .y = +CUBE_SIZE, .z = +CUBE_SIZE},
+		{.x = -CUBE_SIZE, .y = -CUBE_SIZE, .z = +CUBE_SIZE},
+		{.x = +CUBE_SIZE, .y = +CUBE_SIZE, .z = +CUBE_SIZE},
+		{.x = +CUBE_SIZE, .y = -CUBE_SIZE, .z = +CUBE_SIZE},
+		{.x = +CUBE_SIZE, .y = +CUBE_SIZE, .z = -CUBE_SIZE},
+		{.x = +CUBE_SIZE, .y = -CUBE_SIZE, .z = -CUBE_SIZE},
+		{.x = -CUBE_SIZE, .y = +CUBE_SIZE, .z = -CUBE_SIZE},
+		{.x = -CUBE_SIZE, .y = -CUBE_SIZE, .z = -CUBE_SIZE}
 	};
 
 	static const vector3f cube_face_normals[] = {
-		{ 0.0f,  0.0f,  1.0f}, /* Front */
-		{ 1.0f,  0.0f,  0.0f}, /* Right */
-		{ 0.0f,  0.0f, -1.0f}, /* Back */
-		{-1.0f,  0.0f,  0.0f}, /* Left */
-		{ 0.0f,  1.0f,  0.0f}, /* Top */
-		{ 0.0f, -1.0f,  0.0f}, /* Bottom */
+		{.x =  0.0f, .y =  0.0f, .z =  1.0f}, /* Front */
+		{.x =  1.0f, .y =  0.0f, .z =  0.0f}, /* Right */
+		{.x =  0.0f, .y =  0.0f, .z = -1.0f}, /* Back */
+		{.x = -1.0f, .y =  0.0f, .z =  0.0f}, /* Left */
+		{.x =  0.0f, .y =  1.0f, .z =  0.0f}, /* Top */
+		{.x =  0.0f, .y = -1.0f, .z =  0.0f}, /* Bottom */
 	};
 
 	static const vector4f cube_color = {
-		1.0f, 0.0f, 0.0f, 1.0f
+		.r = 1.0f, .g = 0.0f, .b = 0.0f, .a = 1.0f
 	};
 
 	cube_mesh_data[0] = (struct cube_vertex){cube_vertices[0], cube_face_normals[0], cube_color};
@@ -594,6 +646,10 @@ int main(int argc, char *argv[])
 	float rot_y = 0.0f;
 	float rot_x = 0.0f;
 
+	static const float light_distance = 3.0f;
+	static const float light_x_rot = DEG_TO_RAD(20.0f);
+	float light_y_rot = 0.0f;
+
 	static int run = 1;
 	while (run) {
 		sceCtrlPeekBufferPositive(0, &pad, 1);
@@ -610,11 +666,11 @@ int main(int argc, char *argv[])
 
 		signed char rx = (signed char)pad.rx - 128;
 		if (abs(rx) > ANALOG_THRESHOLD)
-			rot_x += rx / 1024.0f;
+			rot_y += rx / 1024.0f;
 
 		signed char ry = (signed char)pad.ry - 128;
 		if (abs(ry) > ANALOG_THRESHOLD)
-			rot_y += ry / 1024.0f;
+			rot_x += ry / 1024.0f;
 
 		if (pad.buttons & SCE_CTRL_RTRIGGER)
 			trans_z += 0.025f;
@@ -647,10 +703,9 @@ int main(int argc, char *argv[])
 			1.0f, 1.0f, 0.0f, 1.0f
 		};
 
-		void *clear_color_uniform_buffer;
-		sceGxmReserveFragmentDefaultUniformBuffer(gxm_context, &clear_color_uniform_buffer);
-		sceGxmSetUniformDataF(clear_color_uniform_buffer, gxm_clear_fragment_program_u_clear_color_param,
-			0, sizeof(clear_color) / sizeof(float), clear_color);
+		set_fragment_default_uniform_data(
+			gxm_clear_fragment_program_u_clear_color_param,
+			sizeof(clear_color) / sizeof(float), clear_color);
 
 		sceGxmSetVertexStream(gxm_context, 0, clear_vertices_data);
 		sceGxmDraw(gxm_context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP,
@@ -675,26 +730,55 @@ int main(int argc, char *argv[])
 		sceGxmSetVertexProgram(gxm_context, gxm_cube_vertex_program_patched);
 		sceGxmSetFragmentProgram(gxm_context, gxm_cube_fragment_program_patched);
 
-		void *cube_vertex_mvp_matrix_uniform_buffer;
-		sceGxmReserveVertexDefaultUniformBuffer(gxm_context,
-			&cube_vertex_mvp_matrix_uniform_buffer);
-		sceGxmSetUniformDataF(cube_vertex_mvp_matrix_uniform_buffer,
+		set_vertex_default_uniform_data(
 			gxm_cube_vertex_program_u_mvp_matrix_param,
-			0, sizeof(mvp_matrix) / sizeof(float), (float *)mvp_matrix);
+			sizeof(mvp_matrix) / sizeof(float), mvp_matrix);
 
-		void *cube_fragment_u_modelview_matrix_uniform_buffer;
-		sceGxmReserveFragmentDefaultUniformBuffer(gxm_context,
-			&cube_fragment_u_modelview_matrix_uniform_buffer);
-		sceGxmSetUniformDataF(cube_fragment_u_modelview_matrix_uniform_buffer,
+		set_fragment_default_uniform_data(
 			gxm_cube_fragment_program_u_modelview_matrix_param,
-			0, sizeof(modelview_matrix) / sizeof(float), (float *)modelview_matrix);
+			sizeof(modelview_matrix) / sizeof(float), modelview_matrix);
 
-		void *cube_fragment_u_normal_matrix_uniform_buffer;
-		sceGxmReserveFragmentDefaultUniformBuffer(gxm_context,
-			&cube_fragment_u_normal_matrix_uniform_buffer);
-		sceGxmSetUniformDataF(cube_fragment_u_normal_matrix_uniform_buffer,
+		set_fragment_default_uniform_data(
 			gxm_cube_fragment_program_u_normal_matrix_param,
-			0, sizeof(normal_matrix) / sizeof(float), (float *)normal_matrix);
+			sizeof(normal_matrix) / sizeof(float), normal_matrix);
+
+		static const struct phong_material material = {
+			.ambient = {.r = 0.3f, .g = 0.3f, .b = 0.3f},
+			.diffuse = {.r = 1.0f, .g = 1.0f, .b = 1.0f},
+			.specular = {.r = 1.0f, .g = 1.0f, .b = 1.0f},
+			.shininess = 40.0f
+		};
+
+		set_fragment_default_uniform_data(
+			gxm_cube_fragment_program_phong_material_params.ambient,
+			sizeof(material.ambient) / sizeof(float), &material.ambient);
+		set_fragment_default_uniform_data(
+			gxm_cube_fragment_program_phong_material_params.diffuse,
+			sizeof(material.diffuse) / sizeof(float), &material.diffuse);
+		set_fragment_default_uniform_data(
+			gxm_cube_fragment_program_phong_material_params.specular,
+			sizeof(material.specular) / sizeof(float), &material.specular);
+		set_fragment_default_uniform_data(
+			gxm_cube_fragment_program_phong_material_params.shininess,
+			sizeof(material.shininess) / sizeof(float), &material.shininess);
+
+		struct light light = {
+			.position = {
+				.x = light_distance * cosf(light_x_rot) * cosf(light_y_rot),
+				.y = light_distance * sinf(light_x_rot),
+				.z = light_distance * cosf(light_x_rot) * sinf(light_y_rot) + 3.0f
+			},
+			.color = {.r = 1.0f, .g = 1.0f, .b = 1.0f}
+		};
+
+		light_y_rot += 0.1f;
+
+		set_fragment_default_uniform_data(
+			gxm_cube_fragment_program_light_params.position,
+			sizeof(light.position) / sizeof(float), &light.position);
+		set_fragment_default_uniform_data(
+			gxm_cube_fragment_program_light_params.color,
+			sizeof(light.color) / sizeof(float), &light.color);
 
 		sceGxmSetVertexStream(gxm_context, 0, cube_mesh_data);
 		sceGxmDraw(gxm_context, SCE_GXM_PRIMITIVE_TRIANGLES,

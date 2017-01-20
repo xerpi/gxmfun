@@ -11,11 +11,16 @@ typedef struct {
 } vector2f;
 
 typedef struct {
-	float x, y, z;
+	union { float x; float r; };
+	union { float y; float g; };
+	union { float z; float b; };
 } vector3f;
 
 typedef struct {
-	float x, y, z, w;
+	union { float x; float r; };
+	union { float y; float g; };
+	union { float z; float b; };
+	union { float w; float a; };
 } vector4f;
 
 typedef float matrix3x3[3][3];
