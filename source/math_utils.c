@@ -133,7 +133,7 @@ void matrix4x4_scale(matrix4x4 m, float scale_x, float scale_y, float scale_z)
 	matrix4x4_copy(m, m2);
 }
 
-void matrix_init_orthographic(matrix4x4 m, float left, float right, float bottom, float top, float near, float far)
+void matrix4x4_init_orthographic(matrix4x4 m, float left, float right, float bottom, float top, float near, float far)
 {
 	m[0][0] = 2.0f / (right - left);
 	m[0][1] = 0.0f;
@@ -156,7 +156,7 @@ void matrix_init_orthographic(matrix4x4 m, float left, float right, float bottom
 	m[3][3] = 1.0f;
 }
 
-void matrix_init_frustum(matrix4x4 m, float left, float right, float bottom, float top, float near, float far)
+void matrix4x4_init_frustum(matrix4x4 m, float left, float right, float bottom, float top, float near, float far)
 {
 	m[0][0] = (2.0f * near) / (right - left);
 	m[0][1] = 0.0f;
@@ -179,10 +179,10 @@ void matrix_init_frustum(matrix4x4 m, float left, float right, float bottom, flo
 	m[3][3] = 0.0f;
 }
 
-void matrix_init_perspective(matrix4x4 m, float fov, float aspect, float near, float far)
+void matrix4x4_init_perspective(matrix4x4 m, float fov, float aspect, float near, float far)
 {
 	float half_height = near * tanf(DEG_TO_RAD(fov) * 0.5f);
 	float half_width = half_height * aspect;
 
-	matrix_init_frustum(m, -half_width, half_width, -half_height, half_height, near, far);
+	matrix4x4_init_frustum(m, -half_width, half_width, -half_height, half_height, near, far);
 }

@@ -24,12 +24,8 @@ struct clear_vertex {
 };
 
 struct color_vertex {
-	float x;
-	float y;
-	float r;
-	float g;
-	float b;
-	float a;
+	float x, y, z;
+	float r, g, b, a;
 };
 
 struct display_queue_callback_data {
@@ -86,6 +82,7 @@ static SceGxmShaderPatcherId gxm_color_vertex_program_id;
 static SceGxmShaderPatcherId gxm_color_fragment_program_id;
 static const SceGxmProgramParameter *gxm_color_vertex_program_position_param;
 static const SceGxmProgramParameter *gxm_color_vertex_program_color_param;
+static const SceGxmProgramParameter *gxm_color_vertex_program_u_mvp_matrix_param;
 static SceGxmVertexProgram *gxm_color_vertex_program_patched;
 static SceGxmFragmentProgram *gxm_color_fragment_program_patched;
 
@@ -443,16 +440,19 @@ int main(int argc, char *argv[])
 	gxm_color_vertex_program_color_param = sceGxmProgramFindParameterByName(
 		color_vertex_program, "color");
 
+	gxm_color_vertex_program_u_mvp_matrix_param = sceGxmProgramFindParameterByName(
+		color_vertex_program, "u_mvp_matrix");
+
 	SceGxmVertexAttribute color_vertex_attributes[2];
 	SceGxmVertexStream color_vertex_stream;
 	color_vertex_attributes[0].streamIndex = 0;
 	color_vertex_attributes[0].offset = 0;
 	color_vertex_attributes[0].format = SCE_GXM_ATTRIBUTE_FORMAT_F32;
-	color_vertex_attributes[0].componentCount = 2;
+	color_vertex_attributes[0].componentCount = 3;
 	color_vertex_attributes[0].regIndex = sceGxmProgramParameterGetResourceIndex(
 		gxm_color_vertex_program_position_param);
 	color_vertex_attributes[1].streamIndex = 0;
-	color_vertex_attributes[1].offset = 2 * sizeof(float);
+	color_vertex_attributes[1].offset = 3 * sizeof(float);
 	color_vertex_attributes[1].format = SCE_GXM_ATTRIBUTE_FORMAT_F32;
 	color_vertex_attributes[1].componentCount = 4;
 	color_vertex_attributes[1].regIndex = sceGxmProgramParameterGetResourceIndex(
@@ -469,62 +469,104 @@ int main(int argc, char *argv[])
 		SCE_GXM_MULTISAMPLE_NONE, NULL, color_fragment_program,
 		&gxm_color_fragment_program_patched);
 
-	SceUID color_vertices_uid;
-	struct color_vertex *const color_vertices_data = gpu_alloc_map(
+	SceUID cube_vertices_uid;
+	struct color_vertex *const cube_vertices_data = gpu_alloc_map(
 		SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE, SCE_GXM_MEMORY_ATTRIB_READ,
-		4 * sizeof(struct color_vertex), &color_vertices_uid);
+		8 * sizeof(struct color_vertex), &cube_vertices_uid);
 
-	SceUID color_indices_uid;
-	unsigned short *const color_indices_data = gpu_alloc_map(
+	SceUID cube_indices_uid;
+	unsigned short *const cube_indices_data = gpu_alloc_map(
 		SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE, SCE_GXM_MEMORY_ATTRIB_READ,
-		4 * sizeof(unsigned short), &color_indices_uid);
+		12 * 3 * sizeof(unsigned short), &cube_indices_uid);
 
-	color_vertices_data[0].x = -0.5;
-	color_vertices_data[0].y = -0.5;
-	color_vertices_data[0].r = 1.0f;
-	color_vertices_data[0].g = 0.0f;
-	color_vertices_data[0].b = 0.0f;
-	color_vertices_data[0].a = 1.0f;
+	#define CUBE_SIZE 1.0f
 
-	color_vertices_data[1].x = 0.5;
-	color_vertices_data[1].y = -0.5;
-	color_vertices_data[1].r = 1.0f;
-	color_vertices_data[1].g = 0.0f;
-	color_vertices_data[1].b = 0.0f;
-	color_vertices_data[1].a = 1.0f;
+	static const float cube_vertices[] = {
+		-CUBE_SIZE, -CUBE_SIZE, +CUBE_SIZE,
+		1.0f, 0.0f, 0.0f, 1.0f,
+		+CUBE_SIZE, -CUBE_SIZE, +CUBE_SIZE,
+		1.0f, 0.0f, 0.0f, 1.0f,
+		-CUBE_SIZE, +CUBE_SIZE, +CUBE_SIZE,
+		1.0f, 0.0f, 0.0f, 1.0f,
+		+CUBE_SIZE, +CUBE_SIZE, +CUBE_SIZE,
+		1.0f, 0.0f, 0.0f, 1.0f,
+		-CUBE_SIZE, -CUBE_SIZE, -CUBE_SIZE,
+		1.0f, 0.0f, 0.0f, 1.0f,
+		+CUBE_SIZE, -CUBE_SIZE, -CUBE_SIZE,
+		1.0f, 0.0f, 0.0f, 1.0f,
+		-CUBE_SIZE, +CUBE_SIZE, -CUBE_SIZE,
+		1.0f, 0.0f, 0.0f, 1.0f,
+		+CUBE_SIZE, +CUBE_SIZE, -CUBE_SIZE,
+		1.0f, 0.0f, 0.0f, 1.0f
+		-CUBE_SIZE, -CUBE_SIZE, +CUBE_SIZE,
+		1.0f, 0.0f, 0.0f, 1.0f,
+		+CUBE_SIZE, -CUBE_SIZE, +CUBE_SIZE,
+		1.0f, 0.0f, 0.0f, 1.0f,
+		-CUBE_SIZE, +CUBE_SIZE, +CUBE_SIZE,
+		1.0f, 0.0f, 0.0f, 1.0f,
+		+CUBE_SIZE, +CUBE_SIZE, +CUBE_SIZE,
+		1.0f, 0.0f, 0.0f, 1.0f,
+		-CUBE_SIZE, -CUBE_SIZE, -CUBE_SIZE,
+		1.0f, 0.0f, 0.0f, 1.0f,
+		+CUBE_SIZE, -CUBE_SIZE, -CUBE_SIZE,
+		1.0f, 0.0f, 0.0f, 1.0f,
+		-CUBE_SIZE, +CUBE_SIZE, -CUBE_SIZE,
+		1.0f, 0.0f, 0.0f, 1.0f,
+		+CUBE_SIZE, +CUBE_SIZE, -CUBE_SIZE,
+		1.0f, 0.0f, 0.0f, 1.0f
+	};
+	memcpy(cube_vertices_data, cube_vertices, sizeof(cube_vertices));
 
-	color_vertices_data[2].x = -0.5;
-	color_vertices_data[2].y = 0.5;
-	color_vertices_data[2].r = 1.0f;
-	color_vertices_data[2].g = 0.0f;
-	color_vertices_data[2].b = 0.0f;
-	color_vertices_data[2].a = 1.0f;
-
-	color_vertices_data[3].x = 0.5;
-	color_vertices_data[3].y = 0.5;
-	color_vertices_data[3].r = 1.0f;
-	color_vertices_data[3].g = 0.0f;
-	color_vertices_data[3].b = 0.0f;
-	color_vertices_data[3].a = 1.0f;
-
-	color_indices_data[0] = 0;
-	color_indices_data[1] = 1;
-	color_indices_data[2] = 2;
-	color_indices_data[3] = 3;
-
-	/* Draw stuff */
+	static const unsigned short cube_indices[] = {
+		0, 1, 2,
+		2, 1, 3,
+		1, 5, 3,
+		3, 5, 7,
+		5, 4, 7,
+		7, 4, 6,
+		4, 0, 6,
+		6, 0, 2,
+		4, 5, 0,
+		0, 5, 1,
+		2, 3, 6,
+		6, 3, 7
+	};
+	memcpy(cube_indices_data, cube_indices, sizeof(cube_indices));
 
 	gxm_front_buffer_index = 0;
 	gxm_back_buffer_index = 0;
 
+	matrix4x4 projection_matrix;
+	matrix4x4_init_perspective(projection_matrix, 90.0f,
+		DISPLAY_WIDTH / (float)DISPLAY_HEIGHT, 0.01f, 100.0f);
+
 	SceCtrlData pad;
 	memset(&pad, 0, sizeof(pad));
+
+	float trans_z = -3.0f;
+	float rot_y = 0.0f;
+	float rot_x = 0.0f;
 
 	static int run = 1;
 	while (run) {
 		sceCtrlPeekBufferPositive(0, &pad, 1);
 		if (pad.buttons & SCE_CTRL_START)
 			run = 0;
+
+		if (pad.buttons & SCE_CTRL_UP)
+			trans_z += 0.025f;
+		else if (pad.buttons & SCE_CTRL_DOWN)
+			trans_z -= 0.025f;
+
+		if (pad.buttons & SCE_CTRL_RIGHT)
+			rot_y += 0.025f;
+		else if (pad.buttons & SCE_CTRL_LEFT)
+			rot_y -= 0.025f;
+
+		if (pad.buttons & SCE_CTRL_SQUARE)
+			rot_x += 0.025f;
+		else if (pad.buttons & SCE_CTRL_CIRCLE)
+			rot_x -= 0.025f;
 
 		sceGxmBeginScene(gxm_context,
 			0,
@@ -542,22 +584,40 @@ int main(int argc, char *argv[])
 			1.0f, 1.0f, 0.0f, 1.0f
 		};
 
-		void *uniform_buffer;
-		sceGxmReserveFragmentDefaultUniformBuffer(gxm_context, &uniform_buffer);
-		sceGxmSetUniformDataF(uniform_buffer, gxm_clear_fragment_program_u_clear_color_param,
+		void *clear_color_uniform_buffer;
+		sceGxmReserveFragmentDefaultUniformBuffer(gxm_context, &clear_color_uniform_buffer);
+		sceGxmSetUniformDataF(clear_color_uniform_buffer, gxm_clear_fragment_program_u_clear_color_param,
 			0, sizeof(clear_color) / sizeof(float), clear_color);
 
 		sceGxmSetVertexStream(gxm_context, 0, clear_vertices_data);
 		sceGxmDraw(gxm_context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP,
 			SCE_GXM_INDEX_FORMAT_U16, clear_indices_data, 4);
 
+		matrix4x4 mvp_matrix;
+		matrix4x4 mv_matrix;
+		matrix4x4 view_matrix;
+		matrix4x4 model_matrix;
+		matrix4x4_identity(view_matrix);
+		matrix4x4_identity(model_matrix);
+
+		matrix4x4_translate(model_matrix, 0.0f, 0.0f, trans_z);
+		matrix4x4_rotate_y(model_matrix, rot_y);
+		matrix4x4_rotate_x(model_matrix, rot_x);
+
+		matrix4x4_multiply(mv_matrix, view_matrix, model_matrix);
+		matrix4x4_multiply(mvp_matrix, projection_matrix, mv_matrix);
 
 		sceGxmSetVertexProgram(gxm_context, gxm_color_vertex_program_patched);
 		sceGxmSetFragmentProgram(gxm_context, gxm_color_fragment_program_patched);
 
-		sceGxmSetVertexStream(gxm_context, 0, color_vertices_data);
-		sceGxmDraw(gxm_context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP,
-			SCE_GXM_INDEX_FORMAT_U16, color_indices_data, 4);
+		void *color_mvp_matrix_uniform_buffer;
+		sceGxmReserveVertexDefaultUniformBuffer(gxm_context, &color_mvp_matrix_uniform_buffer);
+		sceGxmSetUniformDataF(color_mvp_matrix_uniform_buffer, gxm_color_vertex_program_u_mvp_matrix_param,
+			0, sizeof(mvp_matrix) / sizeof(float), (float *)mvp_matrix);
+
+		sceGxmSetVertexStream(gxm_context, 0, cube_vertices_data);
+		sceGxmDraw(gxm_context, SCE_GXM_PRIMITIVE_TRIANGLES,
+			SCE_GXM_INDEX_FORMAT_U16, cube_indices_data, 12 * 3);
 
 		sceGxmEndScene(gxm_context, NULL, NULL);
 
@@ -580,8 +640,8 @@ int main(int argc, char *argv[])
 	gpu_unmap_free(clear_vertices_uid);
 	gpu_unmap_free(clear_indices_uid);
 
-	gpu_unmap_free(color_vertices_uid);
-	gpu_unmap_free(color_indices_uid);
+	gpu_unmap_free(cube_vertices_uid);
+	gpu_unmap_free(cube_indices_uid);
 
 	sceGxmShaderPatcherReleaseVertexProgram(gxm_shader_patcher,
 		gxm_clear_vertex_program_patched);
