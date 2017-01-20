@@ -1,0 +1,10 @@
+void main(
+	float2 position,
+	float4 color,
+	float4 out out_position: POSITION,
+	float4 out out_color: COLOR)
+{
+	out_position = float4(position, 1.0f, 1.0f);
+	out_color = color;
+}
+

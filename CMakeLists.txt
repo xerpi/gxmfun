@@ -27,10 +27,12 @@ set(SOURCES
 
 set(VERTEX_SHADERS
 	shader/clear_v.cg
+	shader/color_v.cg
 )
 
 set(FRAGMENT_SHADERS
 	shader/clear_f.cg
+	shader/color_f.cg
 )
 
 foreach(shader ${VERTEX_SHADERS})
