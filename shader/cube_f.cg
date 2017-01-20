@@ -4,7 +4,6 @@ void main(
 	float4 color : COLOR,
 	uniform float4x4 u_modelview_matrix,
 	uniform float3x3 u_normal_matrix,
-	uniform float3 eye_position,
 	out float4 out_color : COLOR)
 {
 	const float3 light_pos = float3(5.0f, 1.0f, 0.0f);

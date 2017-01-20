@@ -602,19 +602,19 @@ int main(int argc, char *argv[])
 
 		signed char lx = (signed char)pad.lx - 128;
 		if (abs(lx) > ANALOG_THRESHOLD)
-			rot_y += lx / 1024.0f;
+			trans_x += lx / 1024.0f;
 
 		signed char ly = (signed char)pad.ly - 128;
 		if (abs(ly) > ANALOG_THRESHOLD)
-			rot_x += ly / 1024.0f;
+			trans_y -= ly / 1024.0f;
 
 		signed char rx = (signed char)pad.rx - 128;
 		if (abs(rx) > ANALOG_THRESHOLD)
-			trans_x += rx / 1024.0f;
+			rot_x += rx / 1024.0f;
 
 		signed char ry = (signed char)pad.ry - 128;
 		if (abs(ry) > ANALOG_THRESHOLD)
-			trans_y -= ry / 1024.0f;
+			rot_y += ry / 1024.0f;
 
 		if (pad.buttons & SCE_CTRL_RTRIGGER)
 			trans_z += 0.025f;
