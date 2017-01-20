@@ -744,9 +744,9 @@ int main(int argc, char *argv[])
 
 		static const struct phong_material material = {
 			.ambient = {.r = 0.3f, .g = 0.3f, .b = 0.3f},
-			.diffuse = {.r = 1.0f, .g = 1.0f, .b = 1.0f},
+			.diffuse = {.r = 0.6f, .g = 0.6f, .b = 0.6f},
 			.specular = {.r = 1.0f, .g = 1.0f, .b = 1.0f},
-			.shininess = 40.0f
+			.shininess = 80.0f
 		};
 
 		set_fragment_default_uniform_data(
