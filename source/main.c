@@ -581,51 +581,56 @@ int main(int argc, char *argv[])
 		{.x =  0.0f, .y = -1.0f, .z =  0.0f}, /* Bottom */
 	};
 
-	static const vector4f cube_color = {
-		.r = 1.0f, .g = 0.0f, .b = 0.0f, .a = 1.0f
+	static const vector4f cube_colors[] = {
+		{.r = 1.0f, .g = 0.0f, .b = 0.0f, .a = 1.0f},
+		{.r = 0.0f, .g = 1.0f, .b = 0.0f, .a = 1.0f},
+		{.r = 0.0f, .g = 0.0f, .b = 1.0f, .a = 1.0f},
+		{.r = 1.0f, .g = 1.0f, .b = 0.0f, .a = 1.0f},
+		{.r = 0.0f, .g = 1.0f, .b = 1.0f, .a = 1.0f},
+		{.r = 1.0f, .g = 0.0f, .b = 1.0f, .a = 1.0f},
 	};
 
-	cube_mesh_data[0] = (struct cube_vertex){cube_vertices[0], cube_face_normals[0], cube_color};
-	cube_mesh_data[1] = (struct cube_vertex){cube_vertices[1], cube_face_normals[0], cube_color};
-	cube_mesh_data[2] = (struct cube_vertex){cube_vertices[2], cube_face_normals[0], cube_color};
-	cube_mesh_data[3] = (struct cube_vertex){cube_vertices[2], cube_face_normals[0], cube_color};
-	cube_mesh_data[4] = (struct cube_vertex){cube_vertices[1], cube_face_normals[0], cube_color};
-	cube_mesh_data[5] = (struct cube_vertex){cube_vertices[3], cube_face_normals[0], cube_color};
+	cube_mesh_data[0] = (struct cube_vertex){cube_vertices[0], cube_face_normals[0], cube_colors[0]};
+	cube_mesh_data[1] = (struct cube_vertex){cube_vertices[1], cube_face_normals[0], cube_colors[0]};
+	cube_mesh_data[2] = (struct cube_vertex){cube_vertices[2], cube_face_normals[0], cube_colors[0]};
+	cube_mesh_data[3] = (struct cube_vertex){cube_vertices[2], cube_face_normals[0], cube_colors[0]};
+	cube_mesh_data[4] = (struct cube_vertex){cube_vertices[1], cube_face_normals[0], cube_colors[0]};
+	cube_mesh_data[5] = (struct cube_vertex){cube_vertices[3], cube_face_normals[0], cube_colors[0]};
 
-	cube_mesh_data[6] = (struct cube_vertex){cube_vertices[2], cube_face_normals[1], cube_color};
-	cube_mesh_data[7] = (struct cube_vertex){cube_vertices[3], cube_face_normals[1], cube_color};
-	cube_mesh_data[8] = (struct cube_vertex){cube_vertices[4], cube_face_normals[1], cube_color};
-	cube_mesh_data[9] = (struct cube_vertex){cube_vertices[4], cube_face_normals[1], cube_color};
-	cube_mesh_data[10] = (struct cube_vertex){cube_vertices[3], cube_face_normals[1], cube_color};
-	cube_mesh_data[11] = (struct cube_vertex){cube_vertices[5], cube_face_normals[1], cube_color};
+	cube_mesh_data[6] = (struct cube_vertex){cube_vertices[2], cube_face_normals[1], cube_colors[1]};
+	cube_mesh_data[7] = (struct cube_vertex){cube_vertices[3], cube_face_normals[1], cube_colors[1]};
+	cube_mesh_data[8] = (struct cube_vertex){cube_vertices[4], cube_face_normals[1], cube_colors[1]};
+	cube_mesh_data[9] = (struct cube_vertex){cube_vertices[4], cube_face_normals[1], cube_colors[1]};
+	cube_mesh_data[10] = (struct cube_vertex){cube_vertices[3], cube_face_normals[1], cube_colors[1]};
+	cube_mesh_data[11] = (struct cube_vertex){cube_vertices[5], cube_face_normals[1], cube_colors[1]};
 
-	cube_mesh_data[12] = (struct cube_vertex){cube_vertices[4], cube_face_normals[2], cube_color};
-	cube_mesh_data[13] = (struct cube_vertex){cube_vertices[5], cube_face_normals[2], cube_color};
-	cube_mesh_data[14] = (struct cube_vertex){cube_vertices[6], cube_face_normals[2], cube_color};
-	cube_mesh_data[15] = (struct cube_vertex){cube_vertices[6], cube_face_normals[2], cube_color};
-	cube_mesh_data[16] = (struct cube_vertex){cube_vertices[5], cube_face_normals[2], cube_color};
-	cube_mesh_data[17] = (struct cube_vertex){cube_vertices[7], cube_face_normals[2], cube_color};
+	cube_mesh_data[12] = (struct cube_vertex){cube_vertices[4], cube_face_normals[2], cube_colors[2]};
+	cube_mesh_data[13] = (struct cube_vertex){cube_vertices[5], cube_face_normals[2], cube_colors[2]};
+	cube_mesh_data[14] = (struct cube_vertex){cube_vertices[6], cube_face_normals[2], cube_colors[2]};
+	cube_mesh_data[15] = (struct cube_vertex){cube_vertices[6], cube_face_normals[2], cube_colors[2]};
+	cube_mesh_data[16] = (struct cube_vertex){cube_vertices[5], cube_face_normals[2], cube_colors[2]};
+	cube_mesh_data[17] = (struct cube_vertex){cube_vertices[7], cube_face_normals[2], cube_colors[2]};
 
-	cube_mesh_data[18] = (struct cube_vertex){cube_vertices[6], cube_face_normals[3], cube_color};
-	cube_mesh_data[19] = (struct cube_vertex){cube_vertices[7], cube_face_normals[3], cube_color};
-	cube_mesh_data[20] = (struct cube_vertex){cube_vertices[0], cube_face_normals[3], cube_color};
-	cube_mesh_data[21] = (struct cube_vertex){cube_vertices[0], cube_face_normals[3], cube_color};
-	cube_mesh_data[22] = (struct cube_vertex){cube_vertices[7], cube_face_normals[3], cube_color};
-	cube_mesh_data[23] = (struct cube_vertex){cube_vertices[1], cube_face_normals[3], cube_color};
+	cube_mesh_data[18] = (struct cube_vertex){cube_vertices[6], cube_face_normals[3], cube_colors[3]};
+	cube_mesh_data[19] = (struct cube_vertex){cube_vertices[7], cube_face_normals[3], cube_colors[3]};
+	cube_mesh_data[20] = (struct cube_vertex){cube_vertices[0], cube_face_normals[3], cube_colors[3]};
+	cube_mesh_data[21] = (struct cube_vertex){cube_vertices[0], cube_face_normals[3], cube_colors[3]};
+	cube_mesh_data[22] = (struct cube_vertex){cube_vertices[7], cube_face_normals[3], cube_colors[3]};
+	cube_mesh_data[23] = (struct cube_vertex){cube_vertices[1], cube_face_normals[3], cube_colors[3]};
 
-	cube_mesh_data[24] = (struct cube_vertex){cube_vertices[6], cube_face_normals[4], cube_color};
-	cube_mesh_data[25] = (struct cube_vertex){cube_vertices[0], cube_face_normals[4], cube_color};
-	cube_mesh_data[26] = (struct cube_vertex){cube_vertices[4], cube_face_normals[4], cube_color};
-	cube_mesh_data[27] = (struct cube_vertex){cube_vertices[4], cube_face_normals[4], cube_color};
-	cube_mesh_data[28] = (struct cube_vertex){cube_vertices[0], cube_face_normals[4], cube_color};
-	cube_mesh_data[29] = (struct cube_vertex){cube_vertices[2], cube_face_normals[4], cube_color};
+	cube_mesh_data[24] = (struct cube_vertex){cube_vertices[6], cube_face_normals[4], cube_colors[4]};
+	cube_mesh_data[25] = (struct cube_vertex){cube_vertices[0], cube_face_normals[4], cube_colors[4]};
+	cube_mesh_data[26] = (struct cube_vertex){cube_vertices[4], cube_face_normals[4], cube_colors[4]};
+	cube_mesh_data[27] = (struct cube_vertex){cube_vertices[4], cube_face_normals[4], cube_colors[4]};
+	cube_mesh_data[28] = (struct cube_vertex){cube_vertices[0], cube_face_normals[4], cube_colors[4]};
+	cube_mesh_data[29] = (struct cube_vertex){cube_vertices[2], cube_face_normals[4], cube_colors[4]};
 
-	cube_mesh_data[30] = (struct cube_vertex){cube_vertices[1], cube_face_normals[5], cube_color};
-	cube_mesh_data[31] = (struct cube_vertex){cube_vertices[7], cube_face_normals[5], cube_color};
-	cube_mesh_data[32] = (struct cube_vertex){cube_vertices[3], cube_face_normals[5], cube_color};
-	cube_mesh_data[33] = (struct cube_vertex){cube_vertices[3], cube_face_normals[5], cube_color};
-	cube_mesh_data[34] = (struct cube_vertex){cube_vertices[7], cube_face_normals[5], cube_color};
-	cube_mesh_data[35] = (struct cube_vertex){cube_vertices[5], cube_face_normals[5], cube_color};
+	cube_mesh_data[30] = (struct cube_vertex){cube_vertices[1], cube_face_normals[5], cube_colors[5]};
+	cube_mesh_data[31] = (struct cube_vertex){cube_vertices[7], cube_face_normals[5], cube_colors[5]};
+	cube_mesh_data[32] = (struct cube_vertex){cube_vertices[3], cube_face_normals[5], cube_colors[5]};
+	cube_mesh_data[33] = (struct cube_vertex){cube_vertices[3], cube_face_normals[5], cube_colors[5]};
+	cube_mesh_data[34] = (struct cube_vertex){cube_vertices[7], cube_face_normals[5], cube_colors[5]};
+	cube_mesh_data[35] = (struct cube_vertex){cube_vertices[5], cube_face_normals[5], cube_colors[5]};
 
 	for (i = 0; i < 36; i++)
 		cube_indices_data[i] = i;
@@ -643,8 +648,8 @@ int main(int argc, char *argv[])
 	float trans_x = 0.0f;
 	float trans_y = 0.0f;
 	float trans_z = -3.0f;
-	float rot_y = 0.0f;
-	float rot_x = 0.0f;
+	float rot_y = DEG_TO_RAD(45.0f);
+	float rot_x = DEG_TO_RAD(45.0f);
 
 	static const float light_distance = 3.0f;
 	static const float light_x_rot = DEG_TO_RAD(20.0f);
@@ -700,7 +705,7 @@ int main(int argc, char *argv[])
 		sceGxmSetFragmentProgram(gxm_context, gxm_clear_fragment_program_patched);
 
 		static const float clear_color[4] = {
-			1.0f, 1.0f, 0.0f, 1.0f
+			1.0f, 1.0f, 1.0f, 1.0f
 		};
 
 		set_fragment_default_uniform_data(
