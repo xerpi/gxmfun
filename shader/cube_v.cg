@@ -1,0 +1,17 @@
+float4 main(
+	float3 position : POSITION,
+	float3 normal : NORMAL,
+	float4 color : COLOR,
+	uniform float4x4 u_mvp_matrix,
+	out float3 out_position: TEXCOORD0,
+	out float3 out_normal: TEXCOORD1,
+	out float4 out_color: COLOR) : POSITION
+{
+	out_position = position;
+	out_normal = normal;
+	out_color = color;
+
+	return mul(float4(position, 1.0f), u_mvp_matrix);
+}
+
+

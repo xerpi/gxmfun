@@ -9,6 +9,9 @@
 #include "netlog.h"
 
 #define ALIGN(x, a) (((x) + ((a) - 1)) & ~((a) - 1))
+#define abs(x) (((x) < 0) ? -(x) : (x))
+
+#define ANALOG_THRESHOLD 5
 
 #define DISPLAY_WIDTH 960
 #define DISPLAY_HEIGHT 544
@@ -19,13 +22,18 @@
 #define MAX_PENDING_SWAPS (DISPLAY_BUFFER_COUNT - 1)
 
 struct clear_vertex {
-	float x;
-	float y;
+	vector2f position;
 };
 
 struct color_vertex {
-	float x, y, z;
-	float r, g, b, a;
+	vector3f position;
+	vector4f color;
+};
+
+struct cube_vertex {
+	vector3f position;
+	vector3f normal;
+	vector4f color;
 };
 
 struct display_queue_callback_data {
@@ -34,13 +42,17 @@ struct display_queue_callback_data {
 
 extern unsigned char _binary_clear_v_gxp_start;
 extern unsigned char _binary_clear_f_gxp_start;
-extern unsigned char _binary_color_v_gxp_start;
-extern unsigned char _binary_color_f_gxp_start;
+//extern unsigned char _binary_color_v_gxp_start;
+//extern unsigned char _binary_color_f_gxp_start;
+extern unsigned char _binary_cube_v_gxp_start;
+extern unsigned char _binary_cube_f_gxp_start;
 
 static const SceGxmProgram *const gxm_program_clear_v = (SceGxmProgram *)&_binary_clear_v_gxp_start;
 static const SceGxmProgram *const gxm_program_clear_f = (SceGxmProgram *)&_binary_clear_f_gxp_start;
-static const SceGxmProgram *const gxm_program_color_v = (SceGxmProgram *)&_binary_color_v_gxp_start;
-static const SceGxmProgram *const gxm_program_color_f = (SceGxmProgram *)&_binary_color_f_gxp_start;
+//static const SceGxmProgram *const gxm_program_color_v = (SceGxmProgram *)&_binary_color_v_gxp_start;
+//static const SceGxmProgram *const gxm_program_color_f = (SceGxmProgram *)&_binary_color_f_gxp_start;
+static const SceGxmProgram *const gxm_program_cube_v = (SceGxmProgram *)&_binary_cube_v_gxp_start;
+static const SceGxmProgram *const gxm_program_cube_f = (SceGxmProgram *)&_binary_cube_f_gxp_start;
 
 static SceGxmContext *gxm_context;
 static SceUID vdm_ring_buffer_uid;
@@ -78,13 +90,16 @@ static const SceGxmProgramParameter *gxm_clear_fragment_program_u_clear_color_pa
 static SceGxmVertexProgram *gxm_clear_vertex_program_patched;
 static SceGxmFragmentProgram *gxm_clear_fragment_program_patched;
 
-static SceGxmShaderPatcherId gxm_color_vertex_program_id;
-static SceGxmShaderPatcherId gxm_color_fragment_program_id;
-static const SceGxmProgramParameter *gxm_color_vertex_program_position_param;
-static const SceGxmProgramParameter *gxm_color_vertex_program_color_param;
-static const SceGxmProgramParameter *gxm_color_vertex_program_u_mvp_matrix_param;
-static SceGxmVertexProgram *gxm_color_vertex_program_patched;
-static SceGxmFragmentProgram *gxm_color_fragment_program_patched;
+static SceGxmShaderPatcherId gxm_cube_vertex_program_id;
+static SceGxmShaderPatcherId gxm_cube_fragment_program_id;
+static const SceGxmProgramParameter *gxm_cube_vertex_program_position_param;
+static const SceGxmProgramParameter *gxm_cube_vertex_program_normal_param;
+static const SceGxmProgramParameter *gxm_cube_vertex_program_color_param;
+static const SceGxmProgramParameter *gxm_cube_vertex_program_u_mvp_matrix_param;
+static const SceGxmProgramParameter *gxm_cube_fragment_program_u_modelview_matrix_param;
+static const SceGxmProgramParameter *gxm_cube_fragment_program_u_normal_matrix_param;
+static SceGxmVertexProgram *gxm_cube_vertex_program_patched;
+static SceGxmFragmentProgram *gxm_cube_fragment_program_patched;
 
 static void *gpu_alloc_map(SceKernelMemBlockType type, SceGxmMemoryAttribFlags gpu_attrib, size_t size, SceUID *uid)
 {
@@ -226,6 +241,8 @@ int main(int argc, char *argv[])
 
 	netlog_init();
 	netlog("GXM fun by xerpi\n");
+
+	sceCtrlSetSamplingMode(SCE_CTRL_MODE_ANALOG);
 
 	SceGxmInitializeParams gxm_init_params;
 	memset(&gxm_init_params, 0, sizeof(gxm_init_params));
@@ -409,129 +426,157 @@ int main(int argc, char *argv[])
 		SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE, SCE_GXM_MEMORY_ATTRIB_READ,
 		4 * sizeof(unsigned short), &clear_indices_uid);
 
-	clear_vertices_data[0].x = -1.0f;
-	clear_vertices_data[0].y = -1.0f;
-	clear_vertices_data[1].x = 1.0f;
-	clear_vertices_data[1].y = -1.0f;
-	clear_vertices_data[2].x = -1.0f;
-	clear_vertices_data[2].y = 1.0f;
-	clear_vertices_data[3].x = 1.0f;
-	clear_vertices_data[3].y = 1.0f;
+	clear_vertices_data[0].position = (vector2f){-1.0f, -1.0f};
+	clear_vertices_data[1].position = (vector2f){ 1.0f, -1.0f};
+	clear_vertices_data[2].position = (vector2f){-1.0f,  1.0f};
+	clear_vertices_data[3].position = (vector2f){ 1.0f,  1.0f};
 
 	clear_indices_data[0] = 0;
 	clear_indices_data[1] = 1;
 	clear_indices_data[2] = 2;
 	clear_indices_data[3] = 3;
 
-	sceGxmShaderPatcherRegisterProgram(gxm_shader_patcher, gxm_program_color_v,
-		&gxm_color_vertex_program_id);
+	sceGxmShaderPatcherRegisterProgram(gxm_shader_patcher, gxm_program_cube_v,
+		&gxm_cube_vertex_program_id);
 
-	sceGxmShaderPatcherRegisterProgram(gxm_shader_patcher, gxm_program_color_f,
-		&gxm_color_fragment_program_id);
+	sceGxmShaderPatcherRegisterProgram(gxm_shader_patcher, gxm_program_cube_f,
+		&gxm_cube_fragment_program_id);
 
-	const SceGxmProgram *color_vertex_program =
-		sceGxmShaderPatcherGetProgramFromId(gxm_color_vertex_program_id);
-	const SceGxmProgram *color_fragment_program =
-		sceGxmShaderPatcherGetProgramFromId(gxm_color_fragment_program_id);
+	const SceGxmProgram *cube_vertex_program =
+		sceGxmShaderPatcherGetProgramFromId(gxm_cube_vertex_program_id);
+	const SceGxmProgram *cube_fragment_program =
+		sceGxmShaderPatcherGetProgramFromId(gxm_cube_fragment_program_id);
 
-	gxm_color_vertex_program_position_param = sceGxmProgramFindParameterByName(
-		color_vertex_program, "position");
+	gxm_cube_vertex_program_position_param = sceGxmProgramFindParameterByName(
+		cube_vertex_program, "position");
 
-	gxm_color_vertex_program_color_param = sceGxmProgramFindParameterByName(
-		color_vertex_program, "color");
+	gxm_cube_vertex_program_normal_param = sceGxmProgramFindParameterByName(
+		cube_vertex_program, "normal");
 
-	gxm_color_vertex_program_u_mvp_matrix_param = sceGxmProgramFindParameterByName(
-		color_vertex_program, "u_mvp_matrix");
+	gxm_cube_vertex_program_color_param = sceGxmProgramFindParameterByName(
+		cube_vertex_program, "color");
 
-	SceGxmVertexAttribute color_vertex_attributes[2];
-	SceGxmVertexStream color_vertex_stream;
-	color_vertex_attributes[0].streamIndex = 0;
-	color_vertex_attributes[0].offset = 0;
-	color_vertex_attributes[0].format = SCE_GXM_ATTRIBUTE_FORMAT_F32;
-	color_vertex_attributes[0].componentCount = 3;
-	color_vertex_attributes[0].regIndex = sceGxmProgramParameterGetResourceIndex(
-		gxm_color_vertex_program_position_param);
-	color_vertex_attributes[1].streamIndex = 0;
-	color_vertex_attributes[1].offset = 3 * sizeof(float);
-	color_vertex_attributes[1].format = SCE_GXM_ATTRIBUTE_FORMAT_F32;
-	color_vertex_attributes[1].componentCount = 4;
-	color_vertex_attributes[1].regIndex = sceGxmProgramParameterGetResourceIndex(
-		gxm_color_vertex_program_color_param);
-	color_vertex_stream.stride = sizeof(struct color_vertex);
-	color_vertex_stream.indexSource = SCE_GXM_INDEX_SOURCE_INDEX_16BIT;
+	gxm_cube_vertex_program_u_mvp_matrix_param = sceGxmProgramFindParameterByName(
+		cube_vertex_program, "u_mvp_matrix");
+
+	gxm_cube_fragment_program_u_modelview_matrix_param = sceGxmProgramFindParameterByName(
+		cube_fragment_program, "u_modelview_matrix");
+
+	gxm_cube_fragment_program_u_normal_matrix_param = sceGxmProgramFindParameterByName(
+		cube_fragment_program, "u_normal_matrix");
+
+	SceGxmVertexAttribute cube_vertex_attributes[3];
+	SceGxmVertexStream cube_vertex_stream;
+	cube_vertex_attributes[0].streamIndex = 0;
+	cube_vertex_attributes[0].offset = 0;
+	cube_vertex_attributes[0].format = SCE_GXM_ATTRIBUTE_FORMAT_F32;
+	cube_vertex_attributes[0].componentCount = 3;
+	cube_vertex_attributes[0].regIndex = sceGxmProgramParameterGetResourceIndex(
+		gxm_cube_vertex_program_position_param);
+	cube_vertex_attributes[1].streamIndex = 0;
+	cube_vertex_attributes[1].offset = sizeof(vector3f);
+	cube_vertex_attributes[1].format = SCE_GXM_ATTRIBUTE_FORMAT_F32;
+	cube_vertex_attributes[1].componentCount = 3;
+	cube_vertex_attributes[1].regIndex = sceGxmProgramParameterGetResourceIndex(
+		gxm_cube_vertex_program_normal_param);
+	cube_vertex_attributes[2].streamIndex = 0;
+	cube_vertex_attributes[2].offset = 2 * sizeof(vector3f);
+	cube_vertex_attributes[2].format = SCE_GXM_ATTRIBUTE_FORMAT_F32;
+	cube_vertex_attributes[2].componentCount = 4;
+	cube_vertex_attributes[2].regIndex = sceGxmProgramParameterGetResourceIndex(
+		gxm_cube_vertex_program_color_param);
+	cube_vertex_stream.stride = sizeof(struct cube_vertex);
+	cube_vertex_stream.indexSource = SCE_GXM_INDEX_SOURCE_INDEX_16BIT;
 
 	sceGxmShaderPatcherCreateVertexProgram(gxm_shader_patcher,
-		gxm_color_vertex_program_id, color_vertex_attributes,
-		2, &color_vertex_stream, 1, &gxm_color_vertex_program_patched);
+		gxm_cube_vertex_program_id, cube_vertex_attributes,
+		3, &cube_vertex_stream, 1, &gxm_cube_vertex_program_patched);
 
 	sceGxmShaderPatcherCreateFragmentProgram(gxm_shader_patcher,
-		gxm_color_fragment_program_id, SCE_GXM_OUTPUT_REGISTER_FORMAT_UCHAR4,
-		SCE_GXM_MULTISAMPLE_NONE, NULL, color_fragment_program,
-		&gxm_color_fragment_program_patched);
+		gxm_cube_fragment_program_id, SCE_GXM_OUTPUT_REGISTER_FORMAT_UCHAR4,
+		SCE_GXM_MULTISAMPLE_NONE, NULL, cube_fragment_program,
+		&gxm_cube_fragment_program_patched);
 
-	SceUID cube_vertices_uid;
-	struct color_vertex *const cube_vertices_data = gpu_alloc_map(
+	SceUID cube_mesh_uid;
+	struct cube_vertex *const cube_mesh_data = gpu_alloc_map(
 		SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE, SCE_GXM_MEMORY_ATTRIB_READ,
-		8 * sizeof(struct color_vertex), &cube_vertices_uid);
+		36 * sizeof(struct cube_vertex), &cube_mesh_uid);
 
 	SceUID cube_indices_uid;
 	unsigned short *const cube_indices_data = gpu_alloc_map(
 		SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE, SCE_GXM_MEMORY_ATTRIB_READ,
-		12 * 3 * sizeof(unsigned short), &cube_indices_uid);
+		36 * sizeof(unsigned short), &cube_indices_uid);
 
 	#define CUBE_SIZE 1.0f
 
-	static const float cube_vertices[] = {
-		-CUBE_SIZE, -CUBE_SIZE, +CUBE_SIZE,
-		1.0f, 0.0f, 0.0f, 1.0f,
-		+CUBE_SIZE, -CUBE_SIZE, +CUBE_SIZE,
-		1.0f, 0.0f, 0.0f, 1.0f,
-		-CUBE_SIZE, +CUBE_SIZE, +CUBE_SIZE,
-		1.0f, 0.0f, 0.0f, 1.0f,
-		+CUBE_SIZE, +CUBE_SIZE, +CUBE_SIZE,
-		1.0f, 0.0f, 0.0f, 1.0f,
-		-CUBE_SIZE, -CUBE_SIZE, -CUBE_SIZE,
-		1.0f, 0.0f, 0.0f, 1.0f,
-		+CUBE_SIZE, -CUBE_SIZE, -CUBE_SIZE,
-		1.0f, 0.0f, 0.0f, 1.0f,
-		-CUBE_SIZE, +CUBE_SIZE, -CUBE_SIZE,
-		1.0f, 0.0f, 0.0f, 1.0f,
-		+CUBE_SIZE, +CUBE_SIZE, -CUBE_SIZE,
-		1.0f, 0.0f, 0.0f, 1.0f
-		-CUBE_SIZE, -CUBE_SIZE, +CUBE_SIZE,
-		1.0f, 0.0f, 0.0f, 1.0f,
-		+CUBE_SIZE, -CUBE_SIZE, +CUBE_SIZE,
-		1.0f, 0.0f, 0.0f, 1.0f,
-		-CUBE_SIZE, +CUBE_SIZE, +CUBE_SIZE,
-		1.0f, 0.0f, 0.0f, 1.0f,
-		+CUBE_SIZE, +CUBE_SIZE, +CUBE_SIZE,
-		1.0f, 0.0f, 0.0f, 1.0f,
-		-CUBE_SIZE, -CUBE_SIZE, -CUBE_SIZE,
-		1.0f, 0.0f, 0.0f, 1.0f,
-		+CUBE_SIZE, -CUBE_SIZE, -CUBE_SIZE,
-		1.0f, 0.0f, 0.0f, 1.0f,
-		-CUBE_SIZE, +CUBE_SIZE, -CUBE_SIZE,
-		1.0f, 0.0f, 0.0f, 1.0f,
-		+CUBE_SIZE, +CUBE_SIZE, -CUBE_SIZE,
-		1.0f, 0.0f, 0.0f, 1.0f
+	static const vector3f cube_vertices[] = {
+		{-CUBE_SIZE, +CUBE_SIZE, +CUBE_SIZE},
+		{-CUBE_SIZE, -CUBE_SIZE, +CUBE_SIZE},
+		{+CUBE_SIZE, +CUBE_SIZE, +CUBE_SIZE},
+		{+CUBE_SIZE, -CUBE_SIZE, +CUBE_SIZE},
+		{+CUBE_SIZE, +CUBE_SIZE, -CUBE_SIZE},
+		{+CUBE_SIZE, -CUBE_SIZE, -CUBE_SIZE},
+		{-CUBE_SIZE, +CUBE_SIZE, -CUBE_SIZE},
+		{-CUBE_SIZE, -CUBE_SIZE, -CUBE_SIZE}
 	};
-	memcpy(cube_vertices_data, cube_vertices, sizeof(cube_vertices));
 
-	static const unsigned short cube_indices[] = {
-		0, 1, 2,
-		2, 1, 3,
-		1, 5, 3,
-		3, 5, 7,
-		5, 4, 7,
-		7, 4, 6,
-		4, 0, 6,
-		6, 0, 2,
-		4, 5, 0,
-		0, 5, 1,
-		2, 3, 6,
-		6, 3, 7
+	static const vector3f cube_face_normals[] = {
+		{ 0.0f,  0.0f,  1.0f}, /* Front */
+		{ 1.0f,  0.0f,  0.0f}, /* Right */
+		{ 0.0f,  0.0f, -1.0f}, /* Back */
+		{-1.0f,  0.0f,  0.0f}, /* Left */
+		{ 0.0f,  1.0f,  0.0f}, /* Top */
+		{ 0.0f, -1.0f,  0.0f}, /* Bottom */
 	};
-	memcpy(cube_indices_data, cube_indices, sizeof(cube_indices));
+
+	static const vector4f cube_color = {
+		1.0f, 0.0f, 0.0f, 1.0f
+	};
+
+	cube_mesh_data[0] = (struct cube_vertex){cube_vertices[0], cube_face_normals[0], cube_color};
+	cube_mesh_data[1] = (struct cube_vertex){cube_vertices[1], cube_face_normals[0], cube_color};
+	cube_mesh_data[2] = (struct cube_vertex){cube_vertices[2], cube_face_normals[0], cube_color};
+	cube_mesh_data[3] = (struct cube_vertex){cube_vertices[2], cube_face_normals[0], cube_color};
+	cube_mesh_data[4] = (struct cube_vertex){cube_vertices[1], cube_face_normals[0], cube_color};
+	cube_mesh_data[5] = (struct cube_vertex){cube_vertices[3], cube_face_normals[0], cube_color};
+
+	cube_mesh_data[6] = (struct cube_vertex){cube_vertices[2], cube_face_normals[1], cube_color};
+	cube_mesh_data[7] = (struct cube_vertex){cube_vertices[3], cube_face_normals[1], cube_color};
+	cube_mesh_data[8] = (struct cube_vertex){cube_vertices[4], cube_face_normals[1], cube_color};
+	cube_mesh_data[9] = (struct cube_vertex){cube_vertices[4], cube_face_normals[1], cube_color};
+	cube_mesh_data[10] = (struct cube_vertex){cube_vertices[3], cube_face_normals[1], cube_color};
+	cube_mesh_data[11] = (struct cube_vertex){cube_vertices[5], cube_face_normals[1], cube_color};
+
+	cube_mesh_data[12] = (struct cube_vertex){cube_vertices[4], cube_face_normals[2], cube_color};
+	cube_mesh_data[13] = (struct cube_vertex){cube_vertices[5], cube_face_normals[2], cube_color};
+	cube_mesh_data[14] = (struct cube_vertex){cube_vertices[6], cube_face_normals[2], cube_color};
+	cube_mesh_data[15] = (struct cube_vertex){cube_vertices[6], cube_face_normals[2], cube_color};
+	cube_mesh_data[16] = (struct cube_vertex){cube_vertices[5], cube_face_normals[2], cube_color};
+	cube_mesh_data[17] = (struct cube_vertex){cube_vertices[7], cube_face_normals[2], cube_color};
+
+	cube_mesh_data[18] = (struct cube_vertex){cube_vertices[6], cube_face_normals[3], cube_color};
+	cube_mesh_data[19] = (struct cube_vertex){cube_vertices[7], cube_face_normals[3], cube_color};
+	cube_mesh_data[20] = (struct cube_vertex){cube_vertices[0], cube_face_normals[3], cube_color};
+	cube_mesh_data[21] = (struct cube_vertex){cube_vertices[0], cube_face_normals[3], cube_color};
+	cube_mesh_data[22] = (struct cube_vertex){cube_vertices[7], cube_face_normals[3], cube_color};
+	cube_mesh_data[23] = (struct cube_vertex){cube_vertices[1], cube_face_normals[3], cube_color};
+
+	cube_mesh_data[24] = (struct cube_vertex){cube_vertices[6], cube_face_normals[4], cube_color};
+	cube_mesh_data[25] = (struct cube_vertex){cube_vertices[0], cube_face_normals[4], cube_color};
+	cube_mesh_data[26] = (struct cube_vertex){cube_vertices[4], cube_face_normals[4], cube_color};
+	cube_mesh_data[27] = (struct cube_vertex){cube_vertices[4], cube_face_normals[4], cube_color};
+	cube_mesh_data[28] = (struct cube_vertex){cube_vertices[0], cube_face_normals[4], cube_color};
+	cube_mesh_data[29] = (struct cube_vertex){cube_vertices[2], cube_face_normals[4], cube_color};
+
+	cube_mesh_data[30] = (struct cube_vertex){cube_vertices[1], cube_face_normals[5], cube_color};
+	cube_mesh_data[31] = (struct cube_vertex){cube_vertices[7], cube_face_normals[5], cube_color};
+	cube_mesh_data[32] = (struct cube_vertex){cube_vertices[3], cube_face_normals[5], cube_color};
+	cube_mesh_data[33] = (struct cube_vertex){cube_vertices[3], cube_face_normals[5], cube_color};
+	cube_mesh_data[34] = (struct cube_vertex){cube_vertices[7], cube_face_normals[5], cube_color};
+	cube_mesh_data[35] = (struct cube_vertex){cube_vertices[5], cube_face_normals[5], cube_color};
+
+	for (i = 0; i < 36; i++)
+		cube_indices_data[i] = i;
 
 	gxm_front_buffer_index = 0;
 	gxm_back_buffer_index = 0;
@@ -543,6 +588,8 @@ int main(int argc, char *argv[])
 	SceCtrlData pad;
 	memset(&pad, 0, sizeof(pad));
 
+	float trans_x = 0.0f;
+	float trans_y = 0.0f;
 	float trans_z = -3.0f;
 	float rot_y = 0.0f;
 	float rot_x = 0.0f;
@@ -553,9 +600,25 @@ int main(int argc, char *argv[])
 		if (pad.buttons & SCE_CTRL_START)
 			run = 0;
 
-		if (pad.buttons & SCE_CTRL_UP)
+		signed char lx = (signed char)pad.lx - 128;
+		if (abs(lx) > ANALOG_THRESHOLD)
+			rot_y += lx / 1024.0f;
+
+		signed char ly = (signed char)pad.ly - 128;
+		if (abs(ly) > ANALOG_THRESHOLD)
+			rot_x += ly / 1024.0f;
+
+		signed char rx = (signed char)pad.rx - 128;
+		if (abs(rx) > ANALOG_THRESHOLD)
+			trans_x += rx / 1024.0f;
+
+		signed char ry = (signed char)pad.ry - 128;
+		if (abs(ry) > ANALOG_THRESHOLD)
+			trans_y -= ry / 1024.0f;
+
+		if (pad.buttons & SCE_CTRL_RTRIGGER)
 			trans_z += 0.025f;
-		else if (pad.buttons & SCE_CTRL_DOWN)
+		else if (pad.buttons & SCE_CTRL_LTRIGGER)
 			trans_z -= 0.025f;
 
 		if (pad.buttons & SCE_CTRL_RIGHT)
@@ -594,30 +657,48 @@ int main(int argc, char *argv[])
 			SCE_GXM_INDEX_FORMAT_U16, clear_indices_data, 4);
 
 		matrix4x4 mvp_matrix;
-		matrix4x4 mv_matrix;
+		matrix4x4 modelview_matrix;
 		matrix4x4 view_matrix;
 		matrix4x4 model_matrix;
+		matrix3x3 normal_matrix;
 		matrix4x4_identity(view_matrix);
 		matrix4x4_identity(model_matrix);
 
-		matrix4x4_translate(model_matrix, 0.0f, 0.0f, trans_z);
+		matrix4x4_translate(model_matrix, trans_x, trans_y, trans_z);
 		matrix4x4_rotate_y(model_matrix, rot_y);
 		matrix4x4_rotate_x(model_matrix, rot_x);
 
-		matrix4x4_multiply(mv_matrix, view_matrix, model_matrix);
-		matrix4x4_multiply(mvp_matrix, projection_matrix, mv_matrix);
+		matrix4x4_multiply(modelview_matrix, view_matrix, model_matrix);
+		matrix4x4_multiply(mvp_matrix, projection_matrix, modelview_matrix);
+		matrix3x3_normal_matrix(modelview_matrix, normal_matrix);
 
-		sceGxmSetVertexProgram(gxm_context, gxm_color_vertex_program_patched);
-		sceGxmSetFragmentProgram(gxm_context, gxm_color_fragment_program_patched);
+		sceGxmSetVertexProgram(gxm_context, gxm_cube_vertex_program_patched);
+		sceGxmSetFragmentProgram(gxm_context, gxm_cube_fragment_program_patched);
 
-		void *color_mvp_matrix_uniform_buffer;
-		sceGxmReserveVertexDefaultUniformBuffer(gxm_context, &color_mvp_matrix_uniform_buffer);
-		sceGxmSetUniformDataF(color_mvp_matrix_uniform_buffer, gxm_color_vertex_program_u_mvp_matrix_param,
+		void *cube_vertex_mvp_matrix_uniform_buffer;
+		sceGxmReserveVertexDefaultUniformBuffer(gxm_context,
+			&cube_vertex_mvp_matrix_uniform_buffer);
+		sceGxmSetUniformDataF(cube_vertex_mvp_matrix_uniform_buffer,
+			gxm_cube_vertex_program_u_mvp_matrix_param,
 			0, sizeof(mvp_matrix) / sizeof(float), (float *)mvp_matrix);
 
-		sceGxmSetVertexStream(gxm_context, 0, cube_vertices_data);
+		void *cube_fragment_u_modelview_matrix_uniform_buffer;
+		sceGxmReserveFragmentDefaultUniformBuffer(gxm_context,
+			&cube_fragment_u_modelview_matrix_uniform_buffer);
+		sceGxmSetUniformDataF(cube_fragment_u_modelview_matrix_uniform_buffer,
+			gxm_cube_fragment_program_u_modelview_matrix_param,
+			0, sizeof(modelview_matrix) / sizeof(float), (float *)modelview_matrix);
+
+		void *cube_fragment_u_normal_matrix_uniform_buffer;
+		sceGxmReserveFragmentDefaultUniformBuffer(gxm_context,
+			&cube_fragment_u_normal_matrix_uniform_buffer);
+		sceGxmSetUniformDataF(cube_fragment_u_normal_matrix_uniform_buffer,
+			gxm_cube_fragment_program_u_normal_matrix_param,
+			0, sizeof(normal_matrix) / sizeof(float), (float *)normal_matrix);
+
+		sceGxmSetVertexStream(gxm_context, 0, cube_mesh_data);
 		sceGxmDraw(gxm_context, SCE_GXM_PRIMITIVE_TRIANGLES,
-			SCE_GXM_INDEX_FORMAT_U16, cube_indices_data, 12 * 3);
+			SCE_GXM_INDEX_FORMAT_U16, cube_indices_data, 36);
 
 		sceGxmEndScene(gxm_context, NULL, NULL);
 
@@ -640,7 +721,7 @@ int main(int argc, char *argv[])
 	gpu_unmap_free(clear_vertices_uid);
 	gpu_unmap_free(clear_indices_uid);
 
-	gpu_unmap_free(cube_vertices_uid);
+	gpu_unmap_free(cube_mesh_uid);
 	gpu_unmap_free(cube_indices_uid);
 
 	sceGxmShaderPatcherReleaseVertexProgram(gxm_shader_patcher,
@@ -649,9 +730,9 @@ int main(int argc, char *argv[])
 		gxm_clear_fragment_program_patched);
 
 	sceGxmShaderPatcherReleaseVertexProgram(gxm_shader_patcher,
-		gxm_color_vertex_program_patched);
+		gxm_cube_vertex_program_patched);
 	sceGxmShaderPatcherReleaseFragmentProgram(gxm_shader_patcher,
-		gxm_color_fragment_program_patched);
+		gxm_cube_fragment_program_patched);
 
 	sceGxmShaderPatcherUnregisterProgram(gxm_shader_patcher,
 		gxm_clear_vertex_program_id);
@@ -659,9 +740,9 @@ int main(int argc, char *argv[])
 		gxm_clear_fragment_program_id);
 
 	sceGxmShaderPatcherUnregisterProgram(gxm_shader_patcher,
-		gxm_color_vertex_program_id);
+		gxm_cube_vertex_program_id);
 	sceGxmShaderPatcherUnregisterProgram(gxm_shader_patcher,
-		gxm_color_fragment_program_id);
+		gxm_cube_fragment_program_id);
 
 	sceGxmShaderPatcherDestroy(gxm_shader_patcher);
 

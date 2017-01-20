@@ -1,0 +1,30 @@
+void main(
+	float3 position : TEXCOORD0,
+	float3 normal : TEXCOORD1,
+	float4 color : COLOR,
+	uniform float4x4 u_modelview_matrix,
+	uniform float3x3 u_normal_matrix,
+	uniform float3 eye_position,
+	out float4 out_color : COLOR)
+{
+	const float3 light_pos = float3(5.0f, 1.0f, 0.0f);
+	const float3 light_color = float3(1.0f, 1.0f, 1.0f);
+
+	float3 position_eyespace = mul(float4(position, 1.0f), u_modelview_matrix).xyz;
+	float3 L = normalize(light_pos - position_eyespace);
+	float3 normal_eyespace = mul(normal, u_normal_matrix);
+
+	/* Ambient */
+	float3 ambient = 0.4f * light_color;
+
+	/* Diffuse */
+	float3 diffuse = max(0.0f, dot(L, normal_eyespace)) * light_color;
+
+	/* Specular */
+	float3 R = reflect(-L, normal_eyespace);
+	float3 V = normalize(-position_eyespace);
+	float shine = pow(max(0.0f, dot(R, V)), 40.0f);
+	float3 specular = shine * light_color;
+
+	out_color = float4(ambient + diffuse + specular, 1.0f) * color;
+}
