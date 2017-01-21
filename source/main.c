@@ -538,8 +538,16 @@ int main(int argc, char *argv[])
 	SceCtrlData pad;
 	memset(&pad, 0, sizeof(pad));
 
+	static vector3f camera_initial_pos = {
+		.x = 0.0f, .y = 1.5f, .z = 4.0f
+	};
+
+	static vector3f camera_initial_rot = {
+		.x = -DEG_TO_RAD(20.0f), .y = 0.0f, .z = 0.0f
+	};
+
 	struct camera camera;
-	camera_init_zero(&camera);
+	camera_init(&camera, &camera_initial_pos, &camera_initial_rot);
 
 	float trans_x = 0.0f;
 	float trans_y = CUBE_SIZE + 0.1f;
@@ -651,8 +659,8 @@ int main(int argc, char *argv[])
 			sizeof(light.color) / sizeof(float), &light.color);
 
 		static const struct phong_material cube_material = {
-			.ambient = {.r = 0.1f, .g = 0.1f, .b = 0.1f},
-			.diffuse = {.r = 0.4f, .g = 0.4f, .b = 0.4f},
+			.ambient = {.r = 0.2f, .g = 0.2f, .b = 0.2f},
+			.diffuse = {.r = 0.6f, .g = 0.6f, .b = 0.6f},
 			.specular = {.r = 0.6f, .g = 0.6f, .b = 0.6f},
 			.shininess = 40.0f
 		};
