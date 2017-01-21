@@ -12,7 +12,7 @@
 #define ALIGN(x, a) (((x) + ((a) - 1)) & ~((a) - 1))
 #define abs(x) (((x) < 0) ? -(x) : (x))
 
-#define ANALOG_THRESHOLD 10
+#define ANALOG_THRESHOLD 20
 
 #define DISPLAY_WIDTH 960
 #define DISPLAY_HEIGHT 544
@@ -31,7 +31,7 @@ struct color_vertex {
 	vector4f color;
 };
 
-struct cube_vertex {
+struct mesh_vertex {
 	vector3f position;
 	vector3f normal;
 	vector4f color;
@@ -352,19 +352,15 @@ int main(int argc, char *argv[])
 
 	gxm_cube_vertex_program_position_param = sceGxmProgramFindParameterByName(
 		cube_vertex_program, "position");
-
 	gxm_cube_vertex_program_normal_param = sceGxmProgramFindParameterByName(
 		cube_vertex_program, "normal");
-
 	gxm_cube_vertex_program_color_param = sceGxmProgramFindParameterByName(
 		cube_vertex_program, "color");
-
 	gxm_cube_vertex_program_u_mvp_matrix_param = sceGxmProgramFindParameterByName(
 		cube_vertex_program, "u_mvp_matrix");
 
 	gxm_cube_fragment_program_u_modelview_matrix_param = sceGxmProgramFindParameterByName(
 		cube_fragment_program, "u_modelview_matrix");
-
 	gxm_cube_fragment_program_u_normal_matrix_param = sceGxmProgramFindParameterByName(
 		cube_fragment_program, "u_normal_matrix");
 
@@ -402,7 +398,7 @@ int main(int argc, char *argv[])
 	cube_vertex_attributes[2].componentCount = 4;
 	cube_vertex_attributes[2].regIndex = sceGxmProgramParameterGetResourceIndex(
 		gxm_cube_vertex_program_color_param);
-	cube_vertex_stream.stride = sizeof(struct cube_vertex);
+	cube_vertex_stream.stride = sizeof(struct mesh_vertex);
 	cube_vertex_stream.indexSource = SCE_GXM_INDEX_SOURCE_INDEX_16BIT;
 
 	sceGxmShaderPatcherCreateVertexProgram(gxm_shader_patcher,
@@ -415,9 +411,9 @@ int main(int argc, char *argv[])
 		&gxm_cube_fragment_program_patched);
 
 	SceUID cube_mesh_uid;
-	struct cube_vertex *const cube_mesh_data = gpu_alloc_map(
+	struct mesh_vertex *const cube_mesh_data = gpu_alloc_map(
 		SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE, SCE_GXM_MEMORY_ATTRIB_READ,
-		36 * sizeof(struct cube_vertex), &cube_mesh_uid);
+		36 * sizeof(struct mesh_vertex), &cube_mesh_uid);
 
 	SceUID cube_indices_uid;
 	unsigned short *const cube_indices_data = gpu_alloc_map(
@@ -455,50 +451,82 @@ int main(int argc, char *argv[])
 		{.r = 1.0f, .g = 0.0f, .b = 1.0f, .a = 1.0f},
 	};
 
-	cube_mesh_data[0] = (struct cube_vertex){cube_vertices[0], cube_face_normals[0], cube_colors[0]};
-	cube_mesh_data[1] = (struct cube_vertex){cube_vertices[1], cube_face_normals[0], cube_colors[0]};
-	cube_mesh_data[2] = (struct cube_vertex){cube_vertices[2], cube_face_normals[0], cube_colors[0]};
-	cube_mesh_data[3] = (struct cube_vertex){cube_vertices[2], cube_face_normals[0], cube_colors[0]};
-	cube_mesh_data[4] = (struct cube_vertex){cube_vertices[1], cube_face_normals[0], cube_colors[0]};
-	cube_mesh_data[5] = (struct cube_vertex){cube_vertices[3], cube_face_normals[0], cube_colors[0]};
+	cube_mesh_data[0] = (struct mesh_vertex){cube_vertices[0], cube_face_normals[0], cube_colors[0]};
+	cube_mesh_data[1] = (struct mesh_vertex){cube_vertices[1], cube_face_normals[0], cube_colors[0]};
+	cube_mesh_data[2] = (struct mesh_vertex){cube_vertices[2], cube_face_normals[0], cube_colors[0]};
+	cube_mesh_data[3] = (struct mesh_vertex){cube_vertices[2], cube_face_normals[0], cube_colors[0]};
+	cube_mesh_data[4] = (struct mesh_vertex){cube_vertices[1], cube_face_normals[0], cube_colors[0]};
+	cube_mesh_data[5] = (struct mesh_vertex){cube_vertices[3], cube_face_normals[0], cube_colors[0]};
 
-	cube_mesh_data[6] = (struct cube_vertex){cube_vertices[2], cube_face_normals[1], cube_colors[1]};
-	cube_mesh_data[7] = (struct cube_vertex){cube_vertices[3], cube_face_normals[1], cube_colors[1]};
-	cube_mesh_data[8] = (struct cube_vertex){cube_vertices[4], cube_face_normals[1], cube_colors[1]};
-	cube_mesh_data[9] = (struct cube_vertex){cube_vertices[4], cube_face_normals[1], cube_colors[1]};
-	cube_mesh_data[10] = (struct cube_vertex){cube_vertices[3], cube_face_normals[1], cube_colors[1]};
-	cube_mesh_data[11] = (struct cube_vertex){cube_vertices[5], cube_face_normals[1], cube_colors[1]};
+	cube_mesh_data[6] = (struct mesh_vertex){cube_vertices[2], cube_face_normals[1], cube_colors[1]};
+	cube_mesh_data[7] = (struct mesh_vertex){cube_vertices[3], cube_face_normals[1], cube_colors[1]};
+	cube_mesh_data[8] = (struct mesh_vertex){cube_vertices[4], cube_face_normals[1], cube_colors[1]};
+	cube_mesh_data[9] = (struct mesh_vertex){cube_vertices[4], cube_face_normals[1], cube_colors[1]};
+	cube_mesh_data[10] = (struct mesh_vertex){cube_vertices[3], cube_face_normals[1], cube_colors[1]};
+	cube_mesh_data[11] = (struct mesh_vertex){cube_vertices[5], cube_face_normals[1], cube_colors[1]};
 
-	cube_mesh_data[12] = (struct cube_vertex){cube_vertices[4], cube_face_normals[2], cube_colors[2]};
-	cube_mesh_data[13] = (struct cube_vertex){cube_vertices[5], cube_face_normals[2], cube_colors[2]};
-	cube_mesh_data[14] = (struct cube_vertex){cube_vertices[6], cube_face_normals[2], cube_colors[2]};
-	cube_mesh_data[15] = (struct cube_vertex){cube_vertices[6], cube_face_normals[2], cube_colors[2]};
-	cube_mesh_data[16] = (struct cube_vertex){cube_vertices[5], cube_face_normals[2], cube_colors[2]};
-	cube_mesh_data[17] = (struct cube_vertex){cube_vertices[7], cube_face_normals[2], cube_colors[2]};
+	cube_mesh_data[12] = (struct mesh_vertex){cube_vertices[4], cube_face_normals[2], cube_colors[2]};
+	cube_mesh_data[13] = (struct mesh_vertex){cube_vertices[5], cube_face_normals[2], cube_colors[2]};
+	cube_mesh_data[14] = (struct mesh_vertex){cube_vertices[6], cube_face_normals[2], cube_colors[2]};
+	cube_mesh_data[15] = (struct mesh_vertex){cube_vertices[6], cube_face_normals[2], cube_colors[2]};
+	cube_mesh_data[16] = (struct mesh_vertex){cube_vertices[5], cube_face_normals[2], cube_colors[2]};
+	cube_mesh_data[17] = (struct mesh_vertex){cube_vertices[7], cube_face_normals[2], cube_colors[2]};
 
-	cube_mesh_data[18] = (struct cube_vertex){cube_vertices[6], cube_face_normals[3], cube_colors[3]};
-	cube_mesh_data[19] = (struct cube_vertex){cube_vertices[7], cube_face_normals[3], cube_colors[3]};
-	cube_mesh_data[20] = (struct cube_vertex){cube_vertices[0], cube_face_normals[3], cube_colors[3]};
-	cube_mesh_data[21] = (struct cube_vertex){cube_vertices[0], cube_face_normals[3], cube_colors[3]};
-	cube_mesh_data[22] = (struct cube_vertex){cube_vertices[7], cube_face_normals[3], cube_colors[3]};
-	cube_mesh_data[23] = (struct cube_vertex){cube_vertices[1], cube_face_normals[3], cube_colors[3]};
+	cube_mesh_data[18] = (struct mesh_vertex){cube_vertices[6], cube_face_normals[3], cube_colors[3]};
+	cube_mesh_data[19] = (struct mesh_vertex){cube_vertices[7], cube_face_normals[3], cube_colors[3]};
+	cube_mesh_data[20] = (struct mesh_vertex){cube_vertices[0], cube_face_normals[3], cube_colors[3]};
+	cube_mesh_data[21] = (struct mesh_vertex){cube_vertices[0], cube_face_normals[3], cube_colors[3]};
+	cube_mesh_data[22] = (struct mesh_vertex){cube_vertices[7], cube_face_normals[3], cube_colors[3]};
+	cube_mesh_data[23] = (struct mesh_vertex){cube_vertices[1], cube_face_normals[3], cube_colors[3]};
 
-	cube_mesh_data[24] = (struct cube_vertex){cube_vertices[6], cube_face_normals[4], cube_colors[4]};
-	cube_mesh_data[25] = (struct cube_vertex){cube_vertices[0], cube_face_normals[4], cube_colors[4]};
-	cube_mesh_data[26] = (struct cube_vertex){cube_vertices[4], cube_face_normals[4], cube_colors[4]};
-	cube_mesh_data[27] = (struct cube_vertex){cube_vertices[4], cube_face_normals[4], cube_colors[4]};
-	cube_mesh_data[28] = (struct cube_vertex){cube_vertices[0], cube_face_normals[4], cube_colors[4]};
-	cube_mesh_data[29] = (struct cube_vertex){cube_vertices[2], cube_face_normals[4], cube_colors[4]};
+	cube_mesh_data[24] = (struct mesh_vertex){cube_vertices[6], cube_face_normals[4], cube_colors[4]};
+	cube_mesh_data[25] = (struct mesh_vertex){cube_vertices[0], cube_face_normals[4], cube_colors[4]};
+	cube_mesh_data[26] = (struct mesh_vertex){cube_vertices[4], cube_face_normals[4], cube_colors[4]};
+	cube_mesh_data[27] = (struct mesh_vertex){cube_vertices[4], cube_face_normals[4], cube_colors[4]};
+	cube_mesh_data[28] = (struct mesh_vertex){cube_vertices[0], cube_face_normals[4], cube_colors[4]};
+	cube_mesh_data[29] = (struct mesh_vertex){cube_vertices[2], cube_face_normals[4], cube_colors[4]};
 
-	cube_mesh_data[30] = (struct cube_vertex){cube_vertices[1], cube_face_normals[5], cube_colors[5]};
-	cube_mesh_data[31] = (struct cube_vertex){cube_vertices[7], cube_face_normals[5], cube_colors[5]};
-	cube_mesh_data[32] = (struct cube_vertex){cube_vertices[3], cube_face_normals[5], cube_colors[5]};
-	cube_mesh_data[33] = (struct cube_vertex){cube_vertices[3], cube_face_normals[5], cube_colors[5]};
-	cube_mesh_data[34] = (struct cube_vertex){cube_vertices[7], cube_face_normals[5], cube_colors[5]};
-	cube_mesh_data[35] = (struct cube_vertex){cube_vertices[5], cube_face_normals[5], cube_colors[5]};
+	cube_mesh_data[30] = (struct mesh_vertex){cube_vertices[1], cube_face_normals[5], cube_colors[5]};
+	cube_mesh_data[31] = (struct mesh_vertex){cube_vertices[7], cube_face_normals[5], cube_colors[5]};
+	cube_mesh_data[32] = (struct mesh_vertex){cube_vertices[3], cube_face_normals[5], cube_colors[5]};
+	cube_mesh_data[33] = (struct mesh_vertex){cube_vertices[3], cube_face_normals[5], cube_colors[5]};
+	cube_mesh_data[34] = (struct mesh_vertex){cube_vertices[7], cube_face_normals[5], cube_colors[5]};
+	cube_mesh_data[35] = (struct mesh_vertex){cube_vertices[5], cube_face_normals[5], cube_colors[5]};
 
 	for (i = 0; i < 36; i++)
 		cube_indices_data[i] = i;
+
+	SceUID floor_mesh_uid;
+	struct mesh_vertex *const floor_mesh_data = gpu_alloc_map(
+		SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE, SCE_GXM_MEMORY_ATTRIB_READ,
+		4 * sizeof(struct mesh_vertex), &floor_mesh_uid);
+
+	SceUID floor_indices_uid;
+	unsigned short *const floor_indices_data = gpu_alloc_map(
+		SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE, SCE_GXM_MEMORY_ATTRIB_READ,
+		4 * sizeof(unsigned short), &floor_indices_uid);
+
+	#define FLOOR_SIZE 10.0f
+
+	static const vector3f floor_vertices[] = {
+		{.x = -FLOOR_SIZE, .y = 0.0f, .z = -FLOOR_SIZE},
+		{.x = -FLOOR_SIZE, .y = 0.0f, .z = +FLOOR_SIZE},
+		{.x = +FLOOR_SIZE, .y = 0.0f, .z = -FLOOR_SIZE},
+		{.x = +FLOOR_SIZE, .y = 0.0f, .z = +FLOOR_SIZE}
+	};
+
+	static const vector4f floor_color = {
+		.r = 1.0f, .g = 0.0f, .b = 0.0f, .a = 1.0f
+	};
+
+	static const vector3f floor_normal = {
+		.x = 0.0f, .y = 1.0f, .z = 0.0f
+	};
+
+	for (i = 0; i < 4; i++) {
+		floor_mesh_data[i] = (struct mesh_vertex){floor_vertices[i], floor_normal, floor_color};
+		floor_indices_data[i] = i;
+	}
 
 	gxm_front_buffer_index = 0;
 	gxm_back_buffer_index = 0;
@@ -514,7 +542,7 @@ int main(int argc, char *argv[])
 	camera_init_zero(&camera);
 
 	float trans_x = 0.0f;
-	float trans_y = 0.0f;
+	float trans_y = CUBE_SIZE;
 	float trans_z = -3.0f;
 	float rot_y = 0.0f; //DEG_TO_RAD(45.0f);
 	float rot_x = 0.0f; //DEG_TO_RAD(45.0f);
@@ -631,7 +659,7 @@ int main(int argc, char *argv[])
 			.ambient = {.r = 0.3f, .g = 0.3f, .b = 0.3f},
 			.diffuse = {.r = 0.6f, .g = 0.6f, .b = 0.6f},
 			.specular = {.r = 0.8f, .g = 0.8f, .b = 0.8f},
-			.shininess = 40.0f
+			.shininess = 60.0f
 		};
 
 		set_fragment_default_uniform_data(
@@ -665,6 +693,10 @@ int main(int argc, char *argv[])
 			gxm_cube_fragment_program_light_params.color,
 			sizeof(light.color) / sizeof(float), &light.color);
 
+		sceGxmSetVertexStream(gxm_context, 0, floor_mesh_data);
+		sceGxmDraw(gxm_context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP,
+			SCE_GXM_INDEX_FORMAT_U16, floor_indices_data, 4);
+
 		sceGxmSetVertexStream(gxm_context, 0, cube_mesh_data);
 		sceGxmDraw(gxm_context, SCE_GXM_PRIMITIVE_TRIANGLES,
 			SCE_GXM_INDEX_FORMAT_U16, cube_indices_data, 36);
@@ -692,6 +724,9 @@ int main(int argc, char *argv[])
 
 	gpu_unmap_free(cube_mesh_uid);
 	gpu_unmap_free(cube_indices_uid);
+
+	gpu_unmap_free(floor_mesh_uid);
+	gpu_unmap_free(floor_indices_uid);
 
 	sceGxmShaderPatcherReleaseVertexProgram(gxm_shader_patcher,
 		gxm_clear_vertex_program_patched);
