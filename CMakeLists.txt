@@ -21,8 +21,9 @@ link_directories(
 
 set(SOURCES
 	source/main.c
-	source/netlog.c
+	source/camera.c
 	source/math_utils.c
+	source/netlog.c
 )
 
 set(VERTEX_SHADERS

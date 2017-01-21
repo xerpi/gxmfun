@@ -26,6 +26,15 @@ typedef struct {
 typedef float matrix3x3[3][3];
 typedef float matrix4x4[4][4];
 
+void vector3f_init(vector3f *v, float x, float y, float z);
+void vector3f_copy(vector3f *dst, const vector3f *src);
+void vector3f_add(vector3f *v1, const vector3f *v2);
+void vector3f_scalar_mult(vector3f *v, float a);
+void vector3f_add_mult(vector3f *v, const vector3f *u, float a);
+void vector3f_opposite(vector3f *v1, const vector3f *v0);
+float vector3f_dot_product(const vector3f *v1, const vector3f *v2);
+void vector3f_cross_product(vector3f *w, const vector3f *u, const vector3f *v);
+
 void matrix3x3_from_matrix4x4(const matrix4x4 src, matrix3x3 dst);
 
 void matrix4x4_identity(matrix4x4 m);
@@ -42,6 +51,7 @@ void matrix4x4_rotate_y(matrix4x4 m, float rad);
 void matrix4x4_rotate_z(matrix4x4 m, float rad);
 
 void matrix4x4_init_translation(matrix4x4 m, float x, float y, float z);
+void matrix4x4_init_translation_vector3f(matrix4x4 m, const vector3f *v);
 void matrix4x4_translate(matrix4x4 m, float x, float y, float z);
 
 void matrix4x4_init_scaling(matrix4x4 m, float scale_x, float scale_y, float scale_z);
@@ -56,6 +66,6 @@ void matrix4x4_init_perspective(matrix4x4 m, float fov, float aspect, float near
 
 /* Graphics related */
 
-void matrix3x3_normal_matrix(const matrix4x4 m, matrix3x3 out);
+void matrix3x3_normal_matrix(matrix3x3 out, const matrix4x4 m);
 
 #endif

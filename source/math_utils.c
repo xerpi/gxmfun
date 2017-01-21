@@ -2,6 +2,60 @@
 #include <math.h>
 #include "math_utils.h"
 
+void vector3f_init(vector3f *v, float x, float y, float z)
+{
+	v->x = x;
+	v->y = y;
+	v->z = z;
+}
+
+void vector3f_copy(vector3f *dst, const vector3f *src)
+{
+	dst->x = src->x;
+	dst->y = src->y;
+	dst->z = src->z;
+}
+
+void vector3f_add(vector3f *v1, const vector3f *v2)
+{
+	v1->x += v2->x;
+	v1->y += v2->y;
+	v1->z += v2->z;
+}
+
+void vector3f_scalar_mult(vector3f *v, float a)
+{
+	v->x *= a;
+	v->y *= a;
+	v->z *= a;
+}
+
+void vector3f_add_mult(vector3f *v, const vector3f *u, float a)
+{
+	v->x += u->x * a;
+	v->y += u->y * a;
+	v->z += u->z * a;
+}
+
+void vector3f_opposite(vector3f *v1, const vector3f *v0)
+{
+	v1->x = -v0->x;
+	v1->y = -v0->y;
+	v1->z = -v0->z;
+}
+
+float vector3f_dot_product(const vector3f *v1, const vector3f *v2)
+{
+	return v1->x * v2->x + v1->y * v2->y + v1->z * v2->z;
+}
+
+void vector3f_cross_product(vector3f *w, const vector3f *u, const vector3f *v)
+{
+	w->x = u->y * v->z - u->z * v->y;
+	w->y = u->z * v->x - u->x * v->z;
+	w->z = u->x * v->y - u->y * v->x;
+}
+
 void matrix3x3_from_matrix4x4(const matrix4x4 src, matrix3x3 dst)
 {
 	int i, j;
@@ -114,6 +168,15 @@ void matrix4x4_init_translation(matrix4x4 m, float x, float y, float z)
 	m[3][0] = x;
 	m[3][1] = y;
 	m[3][2] = z;
+}
+
+void matrix4x4_init_translation_vector3f(matrix4x4 m, const vector3f *v)
+{
+	matrix4x4_identity(m);
+
+	m[3][0] = v->x;
+	m[3][1] = v->y;
+	m[3][2] = v->z;
 }
 
 void matrix4x4_translate(matrix4x4 m, float x, float y, float z)
@@ -340,7 +403,7 @@ void matrix4x4_init_perspective(matrix4x4 m, float fov, float aspect, float near
 	matrix4x4_init_frustum(m, -half_width, half_width, -half_height, half_height, near, far);
 }
 
-void matrix3x3_normal_matrix(const matrix4x4 m, matrix3x3 out)
+void matrix3x3_normal_matrix(matrix3x3 out, const matrix4x4 m)
 {
 	matrix4x4 m1, m2;
 

@@ -6,12 +6,13 @@
 #include <psp2/ctrl.h>
 #include <psp2/kernel/sysmem.h>
 #include "math_utils.h"
+#include "camera.h"
 #include "netlog.h"
 
 #define ALIGN(x, a) (((x) + ((a) - 1)) & ~((a) - 1))
 #define abs(x) (((x) < 0) ? -(x) : (x))
 
-#define ANALOG_THRESHOLD 5
+#define ANALOG_THRESHOLD 10
 
 #define DISPLAY_WIDTH 960
 #define DISPLAY_HEIGHT 544
@@ -124,154 +125,18 @@ static SceGxmVertexProgram *gxm_cube_vertex_program_patched;
 static SceGxmFragmentProgram *gxm_cube_fragment_program_patched;
 
 static void set_vertex_default_uniform_data(const SceGxmProgramParameter *param,
-	unsigned int component_count, const void *data)
-{
-	void *uniform_buffer;
-	sceGxmReserveVertexDefaultUniformBuffer(gxm_context, &uniform_buffer);
-	sceGxmSetUniformDataF(uniform_buffer, param, 0, component_count, data);
-}
-
+	unsigned int component_count, const void *data);
 static void set_fragment_default_uniform_data(const SceGxmProgramParameter *param,
-	unsigned int component_count, const void *data)
-{
-	void *uniform_buffer;
-	sceGxmReserveFragmentDefaultUniformBuffer(gxm_context, &uniform_buffer);
-	sceGxmSetUniformDataF(uniform_buffer, param, 0, component_count, data);
-}
-
-static void *gpu_alloc_map(SceKernelMemBlockType type, SceGxmMemoryAttribFlags gpu_attrib, size_t size, SceUID *uid)
-{
-	SceUID memuid;
-	void *addr;
-
-	if (type == SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW)
-		size = ALIGN(size, 256 * 1024);
-	else
-		size = ALIGN(size, 4 * 1024);
-
-	memuid = sceKernelAllocMemBlock("gpumem", type, size, NULL);
-	if (memuid < 0)
-		return NULL;
-
-	if (sceKernelGetMemBlockBase(memuid, &addr) < 0)
-		return NULL;
-
-	if (sceGxmMapMemory(addr, size, gpu_attrib) < 0) {
-		sceKernelFreeMemBlock(memuid);
-		return NULL;
-	}
-
-	if (uid)
-		*uid = memuid;
-
-	return addr;
-}
-
-static void gpu_unmap_free(SceUID uid)
-{
-	void *addr;
-
-	if (sceKernelGetMemBlockBase(uid, &addr) < 0)
-		return;
-
-	sceGxmUnmapMemory(addr);
-
-	sceKernelFreeMemBlock(uid);
-}
-
-static void *gpu_vertex_usse_alloc_map(size_t size, SceUID *uid, unsigned int *usse_offset)
-{
-	SceUID memuid;
-	void *addr;
-
-	size = ALIGN(size, 4 * 1024);
-
-	memuid = sceKernelAllocMemBlock("gpu_vertex_usse",
-		SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE, size, NULL);
-	if (memuid < 0)
-		return NULL;
-
-	if (sceKernelGetMemBlockBase(memuid, &addr) < 0)
-		return NULL;
-
-	if (sceGxmMapVertexUsseMemory(addr, size, usse_offset) < 0)
-		return NULL;
-
-	return addr;
-}
-
-static void gpu_vertex_usse_unmap_free(SceUID uid)
-{
-	void *addr;
-
-	if (sceKernelGetMemBlockBase(uid, &addr) < 0)
-		return;
-
-	sceGxmUnmapVertexUsseMemory(addr);
-
-	sceKernelFreeMemBlock(uid);
-}
-
-static void *gpu_fragment_usse_alloc_map(size_t size, SceUID *uid, unsigned int *usse_offset)
-{
-	SceUID memuid;
-	void *addr;
-
-	size = ALIGN(size, 4 * 1024);
-
-	memuid = sceKernelAllocMemBlock("gpu_fragment_usse",
-		SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE, size, NULL);
-	if (memuid < 0)
-		return NULL;
-
-	if (sceKernelGetMemBlockBase(memuid, &addr) < 0)
-		return NULL;
-
-	if (sceGxmMapFragmentUsseMemory(addr, size, usse_offset) < 0)
-		return NULL;
-
-	return addr;
-}
-
-static void gpu_fragment_usse_unmap_free(SceUID uid)
-{
-	void *addr;
-
-	if (sceKernelGetMemBlockBase(uid, &addr) < 0)
-		return;
-
-	sceGxmUnmapFragmentUsseMemory(addr);
-
-	sceKernelFreeMemBlock(uid);
-}
-
-static void *shader_patcher_host_alloc_cb(void *user_data, unsigned int size)
-{
-	return malloc(size);
-}
-
-static void shader_patcher_host_free_cb(void *user_data, void *mem)
-{
-	return free(mem);
-}
-
-static void display_queue_callback(const void *callbackData)
-{
-	SceDisplayFrameBuf display_fb;
-	const struct display_queue_callback_data *cb_data = callbackData;
-
-	memset(&display_fb, 0, sizeof(display_fb));
-	display_fb.size = sizeof(display_fb);
-	display_fb.base = cb_data->addr;
-	display_fb.pitch = DISPLAY_STRIDE;
-	display_fb.pixelformat = DISPLAY_PIXEL_FORMAT;
-	display_fb.width = DISPLAY_WIDTH;
-	display_fb.height = DISPLAY_HEIGHT;
-
-	sceDisplaySetFrameBuf(&display_fb, SCE_DISPLAY_SETBUF_NEXTFRAME);
-
-	sceDisplayWaitVblankStart();
-}
+	unsigned int component_count, const void *data);
+static void *gpu_alloc_map(SceKernelMemBlockType type, SceGxmMemoryAttribFlags gpu_attrib, size_t size, SceUID *uid);
+static void gpu_unmap_free(SceUID uid);
+static void *gpu_vertex_usse_alloc_map(size_t size, SceUID *uid, unsigned int *usse_offset);
+static void gpu_vertex_usse_unmap_free(SceUID uid);
+static void *gpu_fragment_usse_alloc_map(size_t size, SceUID *uid, unsigned int *usse_offset);
+static void gpu_fragment_usse_unmap_free(SceUID uid);
+static void *shader_patcher_host_alloc_cb(void *user_data, unsigned int size);
+static void shader_patcher_host_free_cb(void *user_data, void *mem);
+static void display_queue_callback(const void *callbackData);
 
 int main(int argc, char *argv[])
 {
@@ -645,11 +510,14 @@ int main(int argc, char *argv[])
 	SceCtrlData pad;
 	memset(&pad, 0, sizeof(pad));
 
+	struct camera camera;
+	camera_init_zero(&camera);
+
 	float trans_x = 0.0f;
 	float trans_y = 0.0f;
 	float trans_z = -3.0f;
-	float rot_y = DEG_TO_RAD(45.0f);
-	float rot_x = DEG_TO_RAD(45.0f);
+	float rot_y = 0.0f; //DEG_TO_RAD(45.0f);
+	float rot_x = 0.0f; //DEG_TO_RAD(45.0f);
 
 	static const float light_distance = 3.0f;
 	static const float light_x_rot = DEG_TO_RAD(20.0f);
@@ -661,26 +529,41 @@ int main(int argc, char *argv[])
 		if (pad.buttons & SCE_CTRL_START)
 			run = 0;
 
+
+		vector3f camera_direction;
+		vector3f camera_right;
+
+		camera_get_direction_vector(&camera, &camera_direction);
+		camera_get_right_vector(&camera, &camera_right);
+
+		float forward = 0.0f;
+		float lateral = 0.0f;
+
 		signed char lx = (signed char)pad.lx - 128;
 		if (abs(lx) > ANALOG_THRESHOLD)
-			trans_x += lx / 1024.0f;
+			lateral = lx / 1536.0f;
 
 		signed char ly = (signed char)pad.ly - 128;
 		if (abs(ly) > ANALOG_THRESHOLD)
-			trans_y -= ly / 1024.0f;
+			forward = ly / 1536.0f;
 
 		signed char rx = (signed char)pad.rx - 128;
 		if (abs(rx) > ANALOG_THRESHOLD)
-			rot_y += rx / 1024.0f;
+			camera.rotation.y -= rx / 1536.0f;
 
 		signed char ry = (signed char)pad.ry - 128;
 		if (abs(ry) > ANALOG_THRESHOLD)
-			rot_x += ry / 1024.0f;
+			camera.rotation.x -= ry / 1536.0f;
 
 		if (pad.buttons & SCE_CTRL_RTRIGGER)
-			trans_z += 0.025f;
+			camera.position.y += 0.1f;
 		else if (pad.buttons & SCE_CTRL_LTRIGGER)
-			trans_z -= 0.025f;
+			camera.position.y -= 0.1f;
+
+		vector3f_add_mult(&camera.position, &camera_direction, forward);
+		vector3f_add_mult(&camera.position, &camera_right, lateral);
+
+		camera_update_view_matrix(&camera);
 
 		if (pad.buttons & SCE_CTRL_RIGHT)
 			rot_y += 0.025f;
@@ -718,19 +601,16 @@ int main(int argc, char *argv[])
 
 		matrix4x4 mvp_matrix;
 		matrix4x4 modelview_matrix;
-		matrix4x4 view_matrix;
 		matrix4x4 model_matrix;
 		matrix3x3 normal_matrix;
-		matrix4x4_identity(view_matrix);
-		matrix4x4_identity(model_matrix);
 
-		matrix4x4_translate(model_matrix, trans_x, trans_y, trans_z);
+		matrix4x4_init_translation(model_matrix, trans_x, trans_y, trans_z);
 		matrix4x4_rotate_y(model_matrix, rot_y);
 		matrix4x4_rotate_x(model_matrix, rot_x);
 
-		matrix4x4_multiply(modelview_matrix, view_matrix, model_matrix);
+		matrix4x4_multiply(modelview_matrix, camera.view_matrix, model_matrix);
 		matrix4x4_multiply(mvp_matrix, projection_matrix, modelview_matrix);
-		matrix3x3_normal_matrix(modelview_matrix, normal_matrix);
+		matrix3x3_normal_matrix(normal_matrix, modelview_matrix);
 
 		sceGxmSetVertexProgram(gxm_context, gxm_cube_vertex_program_patched);
 		sceGxmSetFragmentProgram(gxm_context, gxm_cube_fragment_program_patched);
@@ -750,8 +630,8 @@ int main(int argc, char *argv[])
 		static const struct phong_material material = {
 			.ambient = {.r = 0.3f, .g = 0.3f, .b = 0.3f},
 			.diffuse = {.r = 0.6f, .g = 0.6f, .b = 0.6f},
-			.specular = {.r = 1.0f, .g = 1.0f, .b = 1.0f},
-			.shininess = 80.0f
+			.specular = {.r = 0.8f, .g = 0.8f, .b = 0.8f},
+			.shininess = 40.0f
 		};
 
 		set_fragment_default_uniform_data(
@@ -861,4 +741,155 @@ int main(int argc, char *argv[])
 	netlog_fini();
 
 	return 0;
+}
+
+
+void set_vertex_default_uniform_data(const SceGxmProgramParameter *param,
+	unsigned int component_count, const void *data)
+{
+	void *uniform_buffer;
+	sceGxmReserveVertexDefaultUniformBuffer(gxm_context, &uniform_buffer);
+	sceGxmSetUniformDataF(uniform_buffer, param, 0, component_count, data);
+}
+
+void set_fragment_default_uniform_data(const SceGxmProgramParameter *param,
+	unsigned int component_count, const void *data)
+{
+	void *uniform_buffer;
+	sceGxmReserveFragmentDefaultUniformBuffer(gxm_context, &uniform_buffer);
+	sceGxmSetUniformDataF(uniform_buffer, param, 0, component_count, data);
+}
+
+void *gpu_alloc_map(SceKernelMemBlockType type, SceGxmMemoryAttribFlags gpu_attrib, size_t size, SceUID *uid)
+{
+	SceUID memuid;
+	void *addr;
+
+	if (type == SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW)
+		size = ALIGN(size, 256 * 1024);
+	else
+		size = ALIGN(size, 4 * 1024);
+
+	memuid = sceKernelAllocMemBlock("gpumem", type, size, NULL);
+	if (memuid < 0)
+		return NULL;
+
+	if (sceKernelGetMemBlockBase(memuid, &addr) < 0)
+		return NULL;
+
+	if (sceGxmMapMemory(addr, size, gpu_attrib) < 0) {
+		sceKernelFreeMemBlock(memuid);
+		return NULL;
+	}
+
+	if (uid)
+		*uid = memuid;
+
+	return addr;
+}
+
+void gpu_unmap_free(SceUID uid)
+{
+	void *addr;
+
+	if (sceKernelGetMemBlockBase(uid, &addr) < 0)
+		return;
+
+	sceGxmUnmapMemory(addr);
+
+	sceKernelFreeMemBlock(uid);
+}
+
+void *gpu_vertex_usse_alloc_map(size_t size, SceUID *uid, unsigned int *usse_offset)
+{
+	SceUID memuid;
+	void *addr;
+
+	size = ALIGN(size, 4 * 1024);
+
+	memuid = sceKernelAllocMemBlock("gpu_vertex_usse",
+		SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE, size, NULL);
+	if (memuid < 0)
+		return NULL;
+
+	if (sceKernelGetMemBlockBase(memuid, &addr) < 0)
+		return NULL;
+
+	if (sceGxmMapVertexUsseMemory(addr, size, usse_offset) < 0)
+		return NULL;
+
+	return addr;
+}
+
+void gpu_vertex_usse_unmap_free(SceUID uid)
+{
+	void *addr;
+
+	if (sceKernelGetMemBlockBase(uid, &addr) < 0)
+		return;
+
+	sceGxmUnmapVertexUsseMemory(addr);
+
+	sceKernelFreeMemBlock(uid);
+}
+
+void *gpu_fragment_usse_alloc_map(size_t size, SceUID *uid, unsigned int *usse_offset)
+{
+	SceUID memuid;
+	void *addr;
+
+	size = ALIGN(size, 4 * 1024);
+
+	memuid = sceKernelAllocMemBlock("gpu_fragment_usse",
+		SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE, size, NULL);
+	if (memuid < 0)
+		return NULL;
+
+	if (sceKernelGetMemBlockBase(memuid, &addr) < 0)
+		return NULL;
+
+	if (sceGxmMapFragmentUsseMemory(addr, size, usse_offset) < 0)
+		return NULL;
+
+	return addr;
+}
+
+void gpu_fragment_usse_unmap_free(SceUID uid)
+{
+	void *addr;
+
+	if (sceKernelGetMemBlockBase(uid, &addr) < 0)
+		return;
+
+	sceGxmUnmapFragmentUsseMemory(addr);
+
+	sceKernelFreeMemBlock(uid);
+}
+
+void *shader_patcher_host_alloc_cb(void *user_data, unsigned int size)
+{
+	return malloc(size);
+}
+
+void shader_patcher_host_free_cb(void *user_data, void *mem)
+{
+	return free(mem);
+}
+
+void display_queue_callback(const void *callbackData)
+{
+	SceDisplayFrameBuf display_fb;
+	const struct display_queue_callback_data *cb_data = callbackData;
+
+	memset(&display_fb, 0, sizeof(display_fb));
+	display_fb.size = sizeof(display_fb);
+	display_fb.base = cb_data->addr;
+	display_fb.pitch = DISPLAY_STRIDE;
+	display_fb.pixelformat = DISPLAY_PIXEL_FORMAT;
+	display_fb.width = DISPLAY_WIDTH;
+	display_fb.height = DISPLAY_HEIGHT;
+
+	sceDisplaySetFrameBuf(&display_fb, SCE_DISPLAY_SETBUF_NEXTFRAME);
+
+	sceDisplayWaitVblankStart();
 }
