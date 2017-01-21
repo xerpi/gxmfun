@@ -56,6 +56,13 @@ void vector3f_cross_product(vector3f *w, const vector3f *u, const vector3f *v)
 	w->z = u->x * v->y - u->y * v->x;
 }
 
+void vector3f_matrix4x4_mult(vector3f *u, const matrix4x4 m, const vector3f *v)
+{
+	u->x = m[0][0] * v->x + m[1][0] * v->y + m[2][0] * v->z;
+	u->y = m[0][1] * v->x + m[1][1] * v->y + m[2][1] * v->z;
+	u->z = m[0][2] * v->x + m[1][2] * v->y + m[2][2] * v->z;
+}
+
 void matrix3x3_from_matrix4x4(const matrix4x4 src, matrix3x3 dst)
 {
 	int i, j;
