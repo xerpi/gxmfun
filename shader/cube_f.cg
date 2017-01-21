@@ -20,9 +20,7 @@ float3 phong_lighting(float3 normal, float3 L, float3 position)
 	/* Ambient */
 	float3 ambient = u_material.ambient;
 
-	float theta = dot(L, normal);
-	if (theta < 0)
-		return ambient * u_light.color;
+	float theta = max(0.0f, dot(L, normal));
 
 	/* Diffuse */
 	float3 diffuse = theta * u_material.diffuse;

@@ -128,6 +128,13 @@ static void set_vertex_default_uniform_data(const SceGxmProgramParameter *param,
 	unsigned int component_count, const void *data);
 static void set_fragment_default_uniform_data(const SceGxmProgramParameter *param,
 	unsigned int component_count, const void *data);
+static void set_cube_fragment_material_uniform_params(const struct phong_material *material,
+	const struct phong_material_gxm_params *params);
+static void set_cube_matrices_uniform_params(matrix4x4 mvp_matrix,
+	matrix4x4 modelview_matrix, matrix3x3 normal_matrix);
+static void set_cube_fragment_light_uniform_params(const vector3f *light_position_eyespace,
+	const vector3f *light_color, const struct light_gxm_params *params);
+
 static void *gpu_alloc_map(SceKernelMemBlockType type, SceGxmMemoryAttribFlags gpu_attrib, size_t size, SceUID *uid);
 static void gpu_unmap_free(SceUID uid);
 static void *gpu_vertex_usse_alloc_map(size_t size, SceUID *uid, unsigned int *usse_offset);
@@ -623,17 +630,18 @@ int main(int argc, char *argv[])
 		sceGxmSetVertexProgram(gxm_context, gxm_clear_vertex_program_patched);
 		sceGxmSetFragmentProgram(gxm_context, gxm_clear_fragment_program_patched);
 
-		static const float clear_color[4] = {
-			1.0f, 1.0f, 1.0f, 1.0f
-		};
+		{ /* Clear the screen */
+			static const float clear_color[4] = {
+				1.0f, 1.0f, 1.0f, 1.0f
+			};
 
-		set_fragment_default_uniform_data(gxm_clear_fragment_program_u_clear_color_param,
-			sizeof(clear_color) / sizeof(float), clear_color);
+			set_fragment_default_uniform_data(gxm_clear_fragment_program_u_clear_color_param,
+				sizeof(clear_color) / sizeof(float), clear_color);
 
-		sceGxmSetVertexStream(gxm_context, 0, clear_vertices_data);
-		sceGxmDraw(gxm_context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP,
-			SCE_GXM_INDEX_FORMAT_U16, clear_indices_data, 4);
-
+			sceGxmSetVertexStream(gxm_context, 0, clear_vertices_data);
+			sceGxmDraw(gxm_context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP,
+				SCE_GXM_INDEX_FORMAT_U16, clear_indices_data, 4);
+		}
 
 		sceGxmSetVertexProgram(gxm_context, gxm_cube_vertex_program_patched);
 		sceGxmSetFragmentProgram(gxm_context, gxm_cube_fragment_program_patched);
@@ -653,98 +661,69 @@ int main(int argc, char *argv[])
 		vector3f_matrix4x4_mult(&light_position_eyespace,
 			camera.view_matrix, &light.position);
 
-		set_fragment_default_uniform_data(gxm_cube_fragment_program_light_params.position,
-			sizeof(light_position_eyespace) / sizeof(float), &light_position_eyespace);
-		set_fragment_default_uniform_data( gxm_cube_fragment_program_light_params.color,
-			sizeof(light.color) / sizeof(float), &light.color);
+		{ /* Draw the cube */
+			static const struct phong_material cube_material = {
+				.ambient = {.r = 0.2f, .g = 0.2f, .b = 0.2f},
+				.diffuse = {.r = 0.6f, .g = 0.6f, .b = 0.6f},
+				.specular = {.r = 0.6f, .g = 0.6f, .b = 0.6f},
+				.shininess = 40.0f
+			};
 
-		static const struct phong_material cube_material = {
-			.ambient = {.r = 0.2f, .g = 0.2f, .b = 0.2f},
-			.diffuse = {.r = 0.6f, .g = 0.6f, .b = 0.6f},
-			.specular = {.r = 0.6f, .g = 0.6f, .b = 0.6f},
-			.shininess = 40.0f
-		};
+			matrix4x4 cube_mvp_matrix;
+			matrix4x4 cube_modelview_matrix;
+			matrix3x3 cube_normal_matrix;
+			matrix4x4 cube_model_matrix;
 
-		set_fragment_default_uniform_data(gxm_cube_fragment_program_phong_material_params.ambient,
-			sizeof(cube_material.ambient) / sizeof(float), &cube_material.ambient);
-		set_fragment_default_uniform_data(gxm_cube_fragment_program_phong_material_params.diffuse,
-			sizeof(cube_material.diffuse) / sizeof(float), &cube_material.diffuse);
-		set_fragment_default_uniform_data(gxm_cube_fragment_program_phong_material_params.specular,
-			sizeof(cube_material.specular) / sizeof(float), &cube_material.specular);
-		set_fragment_default_uniform_data(gxm_cube_fragment_program_phong_material_params.shininess,
-			sizeof(cube_material.shininess) / sizeof(float), &cube_material.shininess);
+			matrix4x4_init_translation(cube_model_matrix, trans_x, trans_y, trans_z);
+			matrix4x4_rotate_y(cube_model_matrix, rot_y);
+			matrix4x4_rotate_x(cube_model_matrix, rot_x);
 
-		matrix4x4 cube_mvp_matrix;
-		matrix4x4 cube_modelview_matrix;
-		matrix3x3 cube_normal_matrix;
-		matrix4x4 cube_model_matrix;
+			matrix4x4_multiply(cube_modelview_matrix, camera.view_matrix, cube_model_matrix);
+			matrix4x4_multiply(cube_mvp_matrix, projection_matrix, cube_modelview_matrix);
+			matrix3x3_normal_matrix(cube_normal_matrix, cube_modelview_matrix);
 
-		matrix4x4_init_translation(cube_model_matrix, trans_x, trans_y, trans_z);
-		matrix4x4_rotate_y(cube_model_matrix, rot_y);
-		matrix4x4_rotate_x(cube_model_matrix, rot_x);
+			set_cube_fragment_light_uniform_params(&light_position_eyespace,
+				&light.color, &gxm_cube_fragment_program_light_params);
+			set_cube_fragment_material_uniform_params(&cube_material,
+				&gxm_cube_fragment_program_phong_material_params);
+			set_cube_matrices_uniform_params(cube_mvp_matrix,
+				cube_modelview_matrix, cube_normal_matrix);
 
-		matrix4x4_multiply(cube_modelview_matrix, camera.view_matrix, cube_model_matrix);
-		matrix4x4_multiply(cube_mvp_matrix, projection_matrix, cube_modelview_matrix);
-		matrix3x3_normal_matrix(cube_normal_matrix, cube_modelview_matrix);
+			sceGxmSetVertexStream(gxm_context, 0, cube_mesh_data);
+			sceGxmDraw(gxm_context, SCE_GXM_PRIMITIVE_TRIANGLES,
+				SCE_GXM_INDEX_FORMAT_U16, cube_indices_data, 36);
+		}
 
-		set_vertex_default_uniform_data(gxm_cube_vertex_program_u_mvp_matrix_param,
-			sizeof(cube_mvp_matrix) / sizeof(float), cube_mvp_matrix);
+		{ /* Draw the floor */
+			static const struct phong_material floor_material = {
+				.ambient = {.r = 0.1f, .g = 0.1f, .b = 0.1f},
+				.diffuse = {.r = 0.4f, .g = 0.4f, .b = 0.4f},
+				.specular = {.r = 0.7f, .g = 0.7f, .b = 0.7f},
+				.shininess = 20.0f
+			};
 
-		set_fragment_default_uniform_data(gxm_cube_fragment_program_u_modelview_matrix_param,
-			sizeof(cube_modelview_matrix) / sizeof(float), cube_modelview_matrix);
+			matrix4x4 floor_mvp_matrix;
+			matrix4x4 floor_modelview_matrix;
+			matrix3x3 floor_normal_matrix;
+			matrix4x4 floor_model_matrix;
 
-		set_fragment_default_uniform_data(gxm_cube_fragment_program_u_normal_matrix_param,
-			sizeof(cube_normal_matrix) / sizeof(float), cube_normal_matrix);
+			matrix4x4_identity(floor_model_matrix);
 
-		sceGxmSetVertexStream(gxm_context, 0, cube_mesh_data);
-		sceGxmDraw(gxm_context, SCE_GXM_PRIMITIVE_TRIANGLES,
-			SCE_GXM_INDEX_FORMAT_U16, cube_indices_data, 36);
+			matrix4x4_multiply(floor_modelview_matrix, camera.view_matrix, floor_model_matrix);
+			matrix4x4_multiply(floor_mvp_matrix, projection_matrix, floor_modelview_matrix);
+			matrix3x3_normal_matrix(floor_normal_matrix, floor_modelview_matrix);
 
+			set_cube_fragment_light_uniform_params(&light_position_eyespace,
+				&light.color, &gxm_cube_fragment_program_light_params);
+			set_cube_fragment_material_uniform_params(&floor_material,
+				&gxm_cube_fragment_program_phong_material_params);
+			set_cube_matrices_uniform_params(floor_mvp_matrix,
+				floor_modelview_matrix, floor_normal_matrix);
 
-		set_fragment_default_uniform_data(gxm_cube_fragment_program_light_params.position,
-			sizeof(light_position_eyespace) / sizeof(float), &light_position_eyespace);
-		set_fragment_default_uniform_data( gxm_cube_fragment_program_light_params.color,
-			sizeof(light.color) / sizeof(float), &light.color);
-
-		static const struct phong_material floor_material = {
-			.ambient = {.r = 0.1f, .g = 0.1f, .b = 0.1f},
-			.diffuse = {.r = 0.4f, .g = 0.4f, .b = 0.4f},
-			.specular = {.r = 0.7f, .g = 0.7f, .b = 0.7f},
-			.shininess = 20.0f
-		};
-
-		set_fragment_default_uniform_data(gxm_cube_fragment_program_phong_material_params.ambient,
-			sizeof(floor_material.ambient) / sizeof(float), &floor_material.ambient);
-		set_fragment_default_uniform_data(gxm_cube_fragment_program_phong_material_params.diffuse,
-			sizeof(floor_material.diffuse) / sizeof(float), &floor_material.diffuse);
-		set_fragment_default_uniform_data(gxm_cube_fragment_program_phong_material_params.specular,
-			sizeof(floor_material.specular) / sizeof(float), &floor_material.specular);
-		set_fragment_default_uniform_data(gxm_cube_fragment_program_phong_material_params.shininess,
-			sizeof(floor_material.shininess) / sizeof(float), &floor_material.shininess);
-
-		matrix4x4 floor_mvp_matrix;
-		matrix4x4 floor_modelview_matrix;
-		matrix3x3 floor_normal_matrix;
-		matrix4x4 floor_model_matrix;
-
-		matrix4x4_identity(floor_model_matrix);
-
-		matrix4x4_multiply(floor_modelview_matrix, camera.view_matrix, floor_model_matrix);
-		matrix4x4_multiply(floor_mvp_matrix, projection_matrix, floor_modelview_matrix);
-		matrix3x3_normal_matrix(floor_normal_matrix, floor_modelview_matrix);
-
-		set_vertex_default_uniform_data(gxm_cube_vertex_program_u_mvp_matrix_param,
-			sizeof(floor_mvp_matrix) / sizeof(float), floor_mvp_matrix);
-
-		set_fragment_default_uniform_data(gxm_cube_fragment_program_u_modelview_matrix_param,
-			sizeof(floor_modelview_matrix) / sizeof(float), floor_modelview_matrix);
-
-		set_fragment_default_uniform_data(gxm_cube_fragment_program_u_normal_matrix_param,
-			sizeof(floor_normal_matrix) / sizeof(float), floor_normal_matrix);
-
-		sceGxmSetVertexStream(gxm_context, 0, floor_mesh_data);
-		sceGxmDraw(gxm_context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP,
-			SCE_GXM_INDEX_FORMAT_U16, floor_indices_data, 4);
+			sceGxmSetVertexStream(gxm_context, 0, floor_mesh_data);
+			sceGxmDraw(gxm_context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP,
+				SCE_GXM_INDEX_FORMAT_U16, floor_indices_data, 4);
+		}
 
 		sceGxmEndScene(gxm_context, NULL, NULL);
 
@@ -823,6 +802,38 @@ int main(int argc, char *argv[])
 	return 0;
 }
 
+static void set_cube_fragment_light_uniform_params(const vector3f *light_position_eyespace,
+	const vector3f *light_color, const struct light_gxm_params *params)
+{
+	set_fragment_default_uniform_data(params->position,
+		sizeof(*light_position_eyespace) / sizeof(float), light_position_eyespace);
+	set_fragment_default_uniform_data(params->color,
+		sizeof(*light_color) / sizeof(float), light_color);
+}
+
+static void set_cube_matrices_uniform_params(matrix4x4 mvp_matrix,
+	matrix4x4 modelview_matrix, matrix3x3 normal_matrix)
+{
+	set_vertex_default_uniform_data(gxm_cube_vertex_program_u_mvp_matrix_param,
+		sizeof(matrix4x4) / sizeof(float), mvp_matrix);
+	set_fragment_default_uniform_data(gxm_cube_fragment_program_u_modelview_matrix_param,
+		sizeof(matrix4x4) / sizeof(float), modelview_matrix);
+	set_fragment_default_uniform_data(gxm_cube_fragment_program_u_normal_matrix_param,
+		sizeof(matrix3x3) / sizeof(float), normal_matrix);
+}
+
+static void set_cube_fragment_material_uniform_params(const struct phong_material *material,
+	const struct phong_material_gxm_params *params)
+{
+	set_fragment_default_uniform_data(params->ambient,
+		sizeof(material->ambient) / sizeof(float), &material->ambient);
+	set_fragment_default_uniform_data(params->diffuse,
+		sizeof(material->diffuse) / sizeof(float), &material->diffuse);
+	set_fragment_default_uniform_data(params->specular,
+		sizeof(material->specular) / sizeof(float), &material->specular);
+	set_fragment_default_uniform_data(params->shininess,
+		sizeof(material->shininess) / sizeof(float), &material->shininess);
+}
 
 void set_vertex_default_uniform_data(const SceGxmProgramParameter *param,
 	unsigned int component_count, const void *data)
