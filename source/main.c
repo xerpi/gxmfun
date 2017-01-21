@@ -91,10 +91,8 @@ static void *gxm_color_surfaces_addr[DISPLAY_BUFFER_COUNT];
 static SceGxmSyncObject *gxm_sync_objects[DISPLAY_BUFFER_COUNT];
 static unsigned int gxm_front_buffer_index;
 static unsigned int gxm_back_buffer_index;
-static SceUID gxm_depth_surface_uid;
-static void *gxm_depth_surface_addr;
-static SceUID gxm_stencil_surface_uid;
-static void *gxm_stencil_surface_addr;
+static SceUID gxm_depth_stencil_surface_uid;
+static void *gxm_depth_stencil_surface_addr;
 static SceGxmDepthStencilSurface gxm_depth_stencil_surface;
 static SceGxmShaderPatcher *gxm_shader_patcher;
 static SceUID gxm_shader_patcher_buffer_uid;
@@ -234,20 +232,16 @@ int main(int argc, char *argv[])
 	unsigned int depth_stencil_height = ALIGN(DISPLAY_HEIGHT, SCE_GXM_TILE_SIZEY);
 	unsigned int depth_stencil_samples = depth_stencil_width * depth_stencil_height;
 
-	gxm_depth_surface_addr = gpu_alloc_map(SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW,
+	gxm_depth_stencil_surface_addr = gpu_alloc_map(SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW,
 		SCE_GXM_MEMORY_ATTRIB_READ | SCE_GXM_MEMORY_ATTRIB_WRITE,
-		4 * depth_stencil_samples, &gxm_depth_surface_uid);
-
-	gxm_stencil_surface_addr = gpu_alloc_map(SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW,
-		SCE_GXM_MEMORY_ATTRIB_READ | SCE_GXM_MEMORY_ATTRIB_WRITE,
-		1 * depth_stencil_samples, &gxm_stencil_surface_uid);
+		4 * depth_stencil_samples, &gxm_depth_stencil_surface_uid);
 
 	sceGxmDepthStencilSurfaceInit(&gxm_depth_stencil_surface,
 		SCE_GXM_DEPTH_STENCIL_FORMAT_S8D24,
 		SCE_GXM_DEPTH_STENCIL_SURFACE_TILED,
 		depth_stencil_width,
-		gxm_depth_surface_addr,
-		gxm_stencil_surface_addr);
+		gxm_depth_stencil_surface_addr,
+		NULL);
 
 	static const unsigned int shader_patcher_buffer_size = 64 * 1024;
 	static const unsigned int shader_patcher_vertex_usse_size = 64 * 1024;
@@ -778,8 +772,7 @@ int main(int argc, char *argv[])
 	gpu_vertex_usse_unmap_free(gxm_shader_patcher_vertex_usse_uid);
 	gpu_fragment_usse_unmap_free(gxm_shader_patcher_fragment_usse_uid);
 
-	gpu_unmap_free(gxm_depth_surface_uid);
-	gpu_unmap_free(gxm_stencil_surface_uid);
+	gpu_unmap_free(gxm_depth_stencil_surface_uid);
 
 	for (i = 0; i < DISPLAY_BUFFER_COUNT; i++) {
 		gpu_unmap_free(gxm_color_surfaces_uid[i]);
