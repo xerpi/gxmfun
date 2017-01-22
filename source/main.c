@@ -53,6 +53,15 @@ struct light {
 	vector3f color;
 };
 
+struct portal {
+	float width;
+	float height;
+	struct {
+		matrix4x4 model_matrix;
+	} end1, end2;
+};
+
+
 struct scene_state {
 	/* Cube parameters */
 	float trans_x;
@@ -67,6 +76,8 @@ struct scene_state {
 	float light_y_rot;
 
 	struct light light;
+
+	struct portal portal;
 };
 
 struct phong_material_gxm_params {
@@ -157,6 +168,8 @@ static struct mesh_vertex *cube_mesh_data;
 static unsigned short *cube_indices_data;
 static struct mesh_vertex *floor_mesh_data;
 static unsigned short *floor_indices_data;
+static struct mesh_vertex *portal_frame_mesh_data;
+static unsigned short *portal_frame_indices_data;
 
 static void set_vertex_default_uniform_data(const SceGxmProgramParameter *param,
 	unsigned int component_count, const void *data);
@@ -169,8 +182,9 @@ static void set_cube_matrices_uniform_params(matrix4x4 mvp_matrix,
 static void set_cube_fragment_light_uniform_params(const struct light *light,
 	const struct light_gxm_params *params);
 
+static void update_camera(struct camera *camera, SceCtrlData *pad);
 static void draw_scene(const struct scene_state *state, matrix4x4 projection_matrix, matrix4x4 view_matrix);
-static void update_scene(struct scene_state *state, const struct camera *camera);
+static void update_scene(struct scene_state *state, const struct camera *camera, SceCtrlData *pad);
 
 static void *gpu_alloc_map(SceKernelMemBlockType type, SceGxmMemoryAttribFlags gpu_attrib, size_t size, SceUID *uid);
 static void gpu_unmap_free(SceUID uid);
@@ -508,16 +522,17 @@ int main(int argc, char *argv[])
 		36 * sizeof(unsigned short), &cube_indices_uid);
 
 	#define CUBE_SIZE 1.0f
+	#define CUBE_HALF_SIZE (CUBE_SIZE / 2.0f)
 
 	static const vector3f cube_vertices[] = {
-		{.x = -CUBE_SIZE, .y = +CUBE_SIZE, .z = +CUBE_SIZE},
-		{.x = -CUBE_SIZE, .y = -CUBE_SIZE, .z = +CUBE_SIZE},
-		{.x = +CUBE_SIZE, .y = +CUBE_SIZE, .z = +CUBE_SIZE},
-		{.x = +CUBE_SIZE, .y = -CUBE_SIZE, .z = +CUBE_SIZE},
-		{.x = +CUBE_SIZE, .y = +CUBE_SIZE, .z = -CUBE_SIZE},
-		{.x = +CUBE_SIZE, .y = -CUBE_SIZE, .z = -CUBE_SIZE},
-		{.x = -CUBE_SIZE, .y = +CUBE_SIZE, .z = -CUBE_SIZE},
-		{.x = -CUBE_SIZE, .y = -CUBE_SIZE, .z = -CUBE_SIZE}
+		{.x = -CUBE_HALF_SIZE, .y = +CUBE_HALF_SIZE, .z = +CUBE_HALF_SIZE},
+		{.x = -CUBE_HALF_SIZE, .y = -CUBE_HALF_SIZE, .z = +CUBE_HALF_SIZE},
+		{.x = +CUBE_HALF_SIZE, .y = +CUBE_HALF_SIZE, .z = +CUBE_HALF_SIZE},
+		{.x = +CUBE_HALF_SIZE, .y = -CUBE_HALF_SIZE, .z = +CUBE_HALF_SIZE},
+		{.x = +CUBE_HALF_SIZE, .y = +CUBE_HALF_SIZE, .z = -CUBE_HALF_SIZE},
+		{.x = +CUBE_HALF_SIZE, .y = -CUBE_HALF_SIZE, .z = -CUBE_HALF_SIZE},
+		{.x = -CUBE_HALF_SIZE, .y = +CUBE_HALF_SIZE, .z = -CUBE_HALF_SIZE},
+		{.x = -CUBE_HALF_SIZE, .y = -CUBE_HALF_SIZE, .z = -CUBE_HALF_SIZE}
 	};
 
 	static const vector3f cube_face_normals[] = {
@@ -593,13 +608,14 @@ int main(int argc, char *argv[])
 		SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE, SCE_GXM_MEMORY_ATTRIB_READ,
 		4 * sizeof(unsigned short), &floor_indices_uid);
 
-	#define FLOOR_SIZE 10.0f
+	#define FLOOR_SIZE 20.0f
+	#define FLOOR_HALF_SIZE (FLOOR_SIZE / 2.0f)
 
 	static const vector3f floor_vertices[] = {
-		{.x = -FLOOR_SIZE, .y = 0.0f, .z = -FLOOR_SIZE},
-		{.x = -FLOOR_SIZE, .y = 0.0f, .z = +FLOOR_SIZE},
-		{.x = +FLOOR_SIZE, .y = 0.0f, .z = -FLOOR_SIZE},
-		{.x = +FLOOR_SIZE, .y = 0.0f, .z = +FLOOR_SIZE}
+		{.x = -FLOOR_HALF_SIZE, .y = 0.0f, .z = -FLOOR_HALF_SIZE},
+		{.x = -FLOOR_HALF_SIZE, .y = 0.0f, .z = +FLOOR_HALF_SIZE},
+		{.x = +FLOOR_HALF_SIZE, .y = 0.0f, .z = -FLOOR_HALF_SIZE},
+		{.x = +FLOOR_HALF_SIZE, .y = 0.0f, .z = +FLOOR_HALF_SIZE}
 	};
 
 	static const vector4f floor_color = {
@@ -625,19 +641,89 @@ int main(int argc, char *argv[])
 		SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE, SCE_GXM_MEMORY_ATTRIB_READ,
 		4 * sizeof(unsigned short), &portal_indices_uid);
 
-	#define PORTAL_SIZE 2.0f
+	#define PORTAL_SIZE 4.0f
+	#define PORTAL_HALF_SIZE (PORTAL_SIZE / 2.0f)
 
 	static const vector3f portal_vertices[] = {
-		{.x = -PORTAL_SIZE, .y = +PORTAL_SIZE, .z = 0.0f},
-		{.x = -PORTAL_SIZE, .y = -PORTAL_SIZE, .z = 0.0f},
-		{.x = +PORTAL_SIZE, .y = +PORTAL_SIZE, .z = 0.0f},
-		{.x = +PORTAL_SIZE, .y = -PORTAL_SIZE, .z = 0.0f}
+		{.x = -PORTAL_HALF_SIZE, .y = +PORTAL_HALF_SIZE, .z = 0.0f},
+		{.x = -PORTAL_HALF_SIZE, .y = -PORTAL_HALF_SIZE, .z = 0.0f},
+		{.x = +PORTAL_HALF_SIZE, .y = +PORTAL_HALF_SIZE, .z = 0.0f},
+		{.x = +PORTAL_HALF_SIZE, .y = -PORTAL_HALF_SIZE, .z = 0.0f}
+	};
+
+	static const vector3f portal_normal = {
+		.x = 0.0f, .y = 0.0f, .z = -1.0f
 	};
 
 	for (i = 0; i < 4; i++) {
 		portal_mesh_data[i] = (struct position_vertex){portal_vertices[i]};
 		portal_indices_data[i] = i;
 	}
+
+	SceUID portal_frame_mesh_uid;
+	portal_frame_mesh_data = gpu_alloc_map(
+		SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE, SCE_GXM_MEMORY_ATTRIB_READ,
+		12 * sizeof(struct mesh_vertex), &portal_frame_mesh_uid);
+
+	SceUID portal_frame_indices_uid;
+	portal_frame_indices_data = gpu_alloc_map(
+		SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE, SCE_GXM_MEMORY_ATTRIB_READ,
+		8 * 3 * sizeof(unsigned short), &portal_frame_indices_uid);
+
+	#define PORTAL_FRAME_SIZE 0.2f
+
+	static const vector4f portal_frame_color = {
+		.r = 0.3f, .g = 0.0f, .b = 1.0f, .a = 1.0f
+	};
+
+	static const vector2f portal_frame_position_offsets[12] = {
+		{.x = -PORTAL_HALF_SIZE - PORTAL_FRAME_SIZE, .y = +PORTAL_HALF_SIZE + PORTAL_FRAME_SIZE},
+		{.x = -PORTAL_HALF_SIZE - PORTAL_FRAME_SIZE, .y = +PORTAL_HALF_SIZE},
+		{.x = +PORTAL_HALF_SIZE + PORTAL_FRAME_SIZE, .y = +PORTAL_HALF_SIZE + PORTAL_FRAME_SIZE},
+		{.x = +PORTAL_HALF_SIZE + PORTAL_FRAME_SIZE, .y = +PORTAL_HALF_SIZE},
+		{.x = -PORTAL_HALF_SIZE - PORTAL_FRAME_SIZE, .y = -PORTAL_HALF_SIZE},
+		{.x = -PORTAL_HALF_SIZE, .y = +PORTAL_HALF_SIZE},
+		{.x = -PORTAL_HALF_SIZE, .y = -PORTAL_HALF_SIZE},
+		{.x = +PORTAL_HALF_SIZE, .y = +PORTAL_HALF_SIZE},
+		{.x = +PORTAL_HALF_SIZE, .y = -PORTAL_HALF_SIZE},
+		{.x = +PORTAL_HALF_SIZE + PORTAL_FRAME_SIZE, .y = -PORTAL_HALF_SIZE},
+		{.x = -PORTAL_HALF_SIZE - PORTAL_FRAME_SIZE, .y = -PORTAL_HALF_SIZE - PORTAL_FRAME_SIZE},
+		{.x = +PORTAL_HALF_SIZE + PORTAL_FRAME_SIZE, .y = -PORTAL_HALF_SIZE - PORTAL_FRAME_SIZE},
+	};
+
+	for (i = 0; i < 12; i++) {
+		portal_frame_mesh_data[i] = (struct mesh_vertex){
+			.position = {.x = portal_frame_position_offsets[i].x, .y = portal_frame_position_offsets[i].y, .z = 0.0f},
+			.normal = portal_normal,
+			.color = portal_frame_color
+		};
+	}
+
+	portal_frame_indices_data[0] = 0;
+	portal_frame_indices_data[1] = 1;
+	portal_frame_indices_data[2] = 2;
+	portal_frame_indices_data[3] = 2;
+	portal_frame_indices_data[4] = 1;
+	portal_frame_indices_data[5] = 3;
+	portal_frame_indices_data[6] = 1;
+	portal_frame_indices_data[7] = 4;
+	portal_frame_indices_data[8] = 5;
+	portal_frame_indices_data[9] = 5;
+	portal_frame_indices_data[10] = 4;
+	portal_frame_indices_data[11] = 6;
+	portal_frame_indices_data[12] = 7;
+	portal_frame_indices_data[13] = 8;
+	portal_frame_indices_data[14] = 3;
+	portal_frame_indices_data[15] = 3;
+	portal_frame_indices_data[16] = 8;
+	portal_frame_indices_data[17] = 9;
+	portal_frame_indices_data[18] = 4;
+	portal_frame_indices_data[19] = 10;
+	portal_frame_indices_data[20] = 9;
+	portal_frame_indices_data[21] = 9;
+	portal_frame_indices_data[22] = 10;
+	portal_frame_indices_data[23] = 11;
+
 
 	gxm_front_buffer_index = 0;
 	gxm_back_buffer_index = 0;
@@ -654,14 +740,14 @@ int main(int argc, char *argv[])
 	};
 
 	static vector3f camera_initial_rot = {
-		.x = -DEG_TO_RAD(20.0f), .y = 0.0f, .z = 0.0f
+		.x = 0.0f, .y = 0.0f, .z = 0.0f
 	};
 
 	struct camera camera;
 	camera_init(&camera, &camera_initial_pos, &camera_initial_rot);
 
 	struct scene_state scene_state;
-	scene_state.trans_x = 0.0f;
+	scene_state.trans_x = 5.0f;
 	scene_state.trans_y = CUBE_SIZE + 0.1f;
 	scene_state.trans_z = 0.0f;
 	scene_state.rot_y = 0.0f; //DEG_TO_RAD(45.0f);
@@ -671,59 +757,26 @@ int main(int argc, char *argv[])
 	scene_state.light_x_rot = DEG_TO_RAD(20.0f);
 	scene_state.light_y_rot = 0.0f;
 
+	scene_state.portal.width = PORTAL_SIZE;
+	scene_state.portal.height = PORTAL_SIZE;
+	matrix4x4_identity(scene_state.portal.end1.model_matrix);
+	matrix4x4_rotate_y(scene_state.portal.end1.model_matrix, M_PI);
+	matrix4x4_translate(scene_state.portal.end1.model_matrix, 0.0f,
+		PORTAL_HALF_SIZE + PORTAL_FRAME_SIZE, 0.0f);
+
+	matrix4x4_identity(scene_state.portal.end2.model_matrix);
+	matrix4x4_rotate_y(scene_state.portal.end2.model_matrix, -M_PI / 2.0f);
+	matrix4x4_translate(scene_state.portal.end2.model_matrix, 0.0f,
+		PORTAL_HALF_SIZE + PORTAL_FRAME_SIZE, 0.0f);
+
 	static int run = 1;
 	while (run) {
 		sceCtrlPeekBufferPositive(0, &pad, 1);
 		if (pad.buttons & SCE_CTRL_START)
 			run = 0;
 
-
-		vector3f camera_direction;
-		vector3f camera_right;
-
-		camera_get_direction_vector(&camera, &camera_direction);
-		camera_get_right_vector(&camera, &camera_right);
-
-		float forward = 0.0f;
-		float lateral = 0.0f;
-
-		signed char lx = (signed char)pad.lx - 128;
-		if (abs(lx) > ANALOG_THRESHOLD)
-			lateral = lx / 1536.0f;
-
-		signed char ly = (signed char)pad.ly - 128;
-		if (abs(ly) > ANALOG_THRESHOLD)
-			forward = ly / 1536.0f;
-
-		signed char rx = (signed char)pad.rx - 128;
-		if (abs(rx) > ANALOG_THRESHOLD)
-			camera.rotation.y -= rx / 1536.0f;
-
-		signed char ry = (signed char)pad.ry - 128;
-		if (abs(ry) > ANALOG_THRESHOLD)
-			camera.rotation.x -= ry / 1536.0f;
-
-		if (pad.buttons & SCE_CTRL_RTRIGGER)
-			camera.position.y += 0.1f;
-		else if (pad.buttons & SCE_CTRL_LTRIGGER)
-			camera.position.y -= 0.1f;
-
-		vector3f_add_mult(&camera.position, &camera_direction, forward);
-		vector3f_add_mult(&camera.position, &camera_right, lateral);
-
-		camera_update_view_matrix(&camera);
-
-		if (pad.buttons & SCE_CTRL_RIGHT)
-			scene_state.rot_y += 0.025f;
-		else if (pad.buttons & SCE_CTRL_LEFT)
-			scene_state.rot_y -= 0.025f;
-
-		if (pad.buttons & SCE_CTRL_SQUARE)
-			scene_state.rot_x += 0.025f;
-		else if (pad.buttons & SCE_CTRL_CIRCLE)
-			scene_state.rot_x -= 0.025f;
-
-		update_scene(&scene_state, &camera);
+		update_camera(&camera, &pad);
+		update_scene(&scene_state, &camera, &pad);
 
 		sceGxmBeginScene(gxm_context,
 			0,
@@ -793,20 +846,16 @@ int main(int argc, char *argv[])
 			sceGxmSetVertexProgram(gxm_context, gxm_disable_color_buffer_vertex_program_patched);
 			sceGxmSetFragmentProgram(gxm_context, gxm_disable_color_buffer_fragment_program_patched);
 
-			matrix4x4 disable_color_buffer_mvp_matrix;
-			matrix4x4 disable_color_buffer_modelview_matrix;
-			matrix4x4 disable_color_buffer_model_matrix;
+			matrix4x4 portal_mvp_matrix;
+			matrix4x4 portal_modelview_matrix;
 
-			/* TODO: Portal translation/rotation */
-			matrix4x4_identity(disable_color_buffer_model_matrix);
-
-			matrix4x4_multiply(disable_color_buffer_modelview_matrix,
-				camera.view_matrix, disable_color_buffer_model_matrix);
-			matrix4x4_multiply(disable_color_buffer_mvp_matrix,
-				projection_matrix, disable_color_buffer_modelview_matrix);
+			matrix4x4_multiply(portal_modelview_matrix,
+				camera.view_matrix, scene_state.portal.end1.model_matrix);
+			matrix4x4_multiply(portal_mvp_matrix,
+				projection_matrix, portal_modelview_matrix);
 
 			set_vertex_default_uniform_data(gxm_disable_color_buffer_vertex_program_u_mvp_matrix_param,
-				sizeof(disable_color_buffer_mvp_matrix) / sizeof(float), disable_color_buffer_mvp_matrix);
+				sizeof(portal_mvp_matrix) / sizeof(float), portal_mvp_matrix);
 
 			sceGxmSetVertexStream(gxm_context, 0, portal_mesh_data);
 			sceGxmDraw(gxm_context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP,
@@ -834,9 +883,40 @@ int main(int argc, char *argv[])
 		{
 			/*
 			 * Render the scene from the other portal's end view.
+			 *     P' = M2 * Mreflect * M1^-1 * P
+			 * If V is the camera's view matrix:
+			 *     V' = M2 * M1^-1 * V
 			 */
+			matrix4x4 m1, m2;
+			matrix4x4 portal_end2_view_matrix;
+
+			matrix4x4_invert(m1, scene_state.portal.end1.model_matrix);
+			matrix4x4_multiply(m2, camera.view_matrix, m1);
+
+			matrix4x4_multiply(portal_end2_view_matrix,
+				m2, scene_state.portal.end2.model_matrix);
+
+			draw_scene(&scene_state, projection_matrix, portal_end2_view_matrix);
 		}
 
+		/*
+		 * Step 9: Disable the stencil test, disable drawing to the color
+		 *         buffer, and enable drawing to the depth buffer.
+		 * Step 10: Clear the depth buffer.
+		 */
+		/* TODO */
+
+		/*
+		 * Step 10: Draw the portal frame once again, this time
+		 *          to the depth buffer which was just cleared.
+		 */
+		/* TODO */
+
+		/*
+		 * Step 11: Enable the color buffer again.
+		 * step 12: Draw the whole scene with the regular camera.
+		 */
+		/* TODO */
 
 		/*
 		 * "Disable" stencil
@@ -887,6 +967,9 @@ int main(int argc, char *argv[])
 
 	gpu_unmap_free(portal_mesh_uid);
 	gpu_unmap_free(portal_indices_uid);
+
+	gpu_unmap_free(portal_frame_mesh_uid);
+	gpu_unmap_free(portal_frame_indices_uid);
 
 	sceGxmShaderPatcherReleaseVertexProgram(gxm_shader_patcher,
 		gxm_disable_color_buffer_vertex_program_patched);
@@ -942,8 +1025,18 @@ int main(int argc, char *argv[])
 	return 0;
 }
 
-static void update_scene(struct scene_state *state, const struct camera *camera)
+static void update_scene(struct scene_state *state, const struct camera *camera, SceCtrlData *pad)
 {
+	if (pad->buttons & SCE_CTRL_RIGHT)
+		state->rot_y += 0.025f;
+	else if (pad->buttons & SCE_CTRL_LEFT)
+		state->rot_y -= 0.025f;
+
+	if (pad->buttons & SCE_CTRL_SQUARE)
+		state->rot_x += 0.025f;
+	else if (pad->buttons & SCE_CTRL_CIRCLE)
+		state->rot_x -= 0.025f;
+
 	vector3f light_position;
 	light_position.x = state->light_distance * cosf(state->light_x_rot) * cosf(state->light_y_rot);
 	light_position.y = state->light_distance * sinf(state->light_x_rot);
@@ -960,6 +1053,34 @@ static void draw_scene(const struct scene_state *state, matrix4x4 projection_mat
 {
 	sceGxmSetVertexProgram(gxm_context, gxm_cube_vertex_program_patched);
 	sceGxmSetFragmentProgram(gxm_context, gxm_cube_fragment_program_patched);
+
+	{ /* Draw the portal frame */
+		static const struct phong_material portal_frame_material = {
+			.ambient = {.r = 0.2f, .g = 0.2f, .b = 0.2f},
+			.diffuse = {.r = 0.6f, .g = 0.6f, .b = 0.6f},
+			.specular = {.r = 0.6f, .g = 0.6f, .b = 0.6f},
+			.shininess = 40.0f
+		};
+
+		matrix4x4 portal_frame_mvp_matrix;
+		matrix4x4 portal_frame_modelview_matrix;
+		matrix3x3 portal_frame_normal_matrix;
+
+		matrix4x4_multiply(portal_frame_modelview_matrix, view_matrix, state->portal.end1.model_matrix);
+		matrix4x4_multiply(portal_frame_mvp_matrix, projection_matrix, portal_frame_modelview_matrix);
+		matrix3x3_normal_matrix(portal_frame_normal_matrix, portal_frame_modelview_matrix);
+
+		set_cube_fragment_light_uniform_params(&state->light,
+			&gxm_cube_fragment_program_light_params);
+		set_cube_fragment_material_uniform_params(&portal_frame_material,
+			&gxm_cube_fragment_program_phong_material_params);
+		set_cube_matrices_uniform_params(portal_frame_mvp_matrix,
+			portal_frame_modelview_matrix, portal_frame_normal_matrix);
+
+		sceGxmSetVertexStream(gxm_context, 0, portal_frame_mesh_data);
+		sceGxmDraw(gxm_context, SCE_GXM_PRIMITIVE_TRIANGLES,
+			SCE_GXM_INDEX_FORMAT_U16, portal_frame_indices_data, 24);
+	}
 
 	{ /* Draw the cube */
 		static const struct phong_material cube_material = {
@@ -1025,6 +1146,44 @@ static void draw_scene(const struct scene_state *state, matrix4x4 projection_mat
 		sceGxmDraw(gxm_context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP,
 			SCE_GXM_INDEX_FORMAT_U16, floor_indices_data, 4);
 	}
+}
+
+static void update_camera(struct camera *camera, SceCtrlData *pad)
+{
+	vector3f camera_direction;
+	vector3f camera_right;
+
+	camera_get_direction_vector(camera, &camera_direction);
+	camera_get_right_vector(camera, &camera_right);
+
+	float forward = 0.0f;
+	float lateral = 0.0f;
+
+	signed char lx = (signed char)pad->lx - 128;
+	if (abs(lx) > ANALOG_THRESHOLD)
+		lateral = lx / 1536.0f;
+
+	signed char ly = (signed char)pad->ly - 128;
+	if (abs(ly) > ANALOG_THRESHOLD)
+		forward = ly / 1536.0f;
+
+	signed char rx = (signed char)pad->rx - 128;
+	if (abs(rx) > ANALOG_THRESHOLD)
+		camera->rotation.y -= rx / 1536.0f;
+
+	signed char ry = (signed char)pad->ry - 128;
+	if (abs(ry) > ANALOG_THRESHOLD)
+		camera->rotation.x -= ry / 1536.0f;
+
+	if (pad->buttons & SCE_CTRL_RTRIGGER)
+		camera->position.y += 0.1f;
+	else if (pad->buttons & SCE_CTRL_LTRIGGER)
+		camera->position.y -= 0.1f;
+
+	vector3f_add_mult(&camera->position, &camera_direction, forward);
+	vector3f_add_mult(&camera->position, &camera_right, lateral);
+
+	camera_update_view_matrix(camera);
 }
 
 static void set_cube_fragment_light_uniform_params(const struct light *light,

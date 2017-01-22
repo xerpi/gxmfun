@@ -213,7 +213,12 @@ void matrix4x4_scale(matrix4x4 m, float scale_x, float scale_y, float scale_z)
 	matrix4x4_copy(m, m2);
 }
 
-void matrix4x4_transpose(const matrix4x4 m, matrix4x4 out)
+void matrix4x4_reflect_origin(matrix4x4 m)
+{
+	matrix4x4_scale(m, -1.0f, -1.0f, -1.0f);
+}
+
+void matrix4x4_transpose(matrix4x4 out, const matrix4x4 m)
 {
 	int i, j;
 
@@ -223,7 +228,7 @@ void matrix4x4_transpose(const matrix4x4 m, matrix4x4 out)
 	}
 }
 
-int matrix4x4_invert(const matrix4x4 m, matrix4x4 out)
+int matrix4x4_invert(matrix4x4 out, const matrix4x4 m)
 {
 	int i, j;
 	float det;
@@ -414,7 +419,7 @@ void matrix3x3_normal_matrix(matrix3x3 out, const matrix4x4 m)
 {
 	matrix4x4 m1, m2;
 
-	matrix4x4_invert(m, m1);
-	matrix4x4_transpose(m1, m2);
+	matrix4x4_invert(m1, m);
+	matrix4x4_transpose(m2, m1);
 	matrix3x3_from_matrix4x4(m2, out);
 }

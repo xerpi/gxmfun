@@ -57,9 +57,10 @@ void matrix4x4_translate(matrix4x4 m, float x, float y, float z);
 
 void matrix4x4_init_scaling(matrix4x4 m, float scale_x, float scale_y, float scale_z);
 void matrix4x4_scale(matrix4x4 m, float scale_x, float scale_y, float scale_z);
+void matrix4x4_reflect_origin(matrix4x4 m);
 
-void matrix4x4_transpose(const matrix4x4 m, matrix4x4 out);
-int matrix4x4_invert(const matrix4x4 m, matrix4x4 inv_out);
+void matrix4x4_transpose(matrix4x4 out, const matrix4x4 m);
+int matrix4x4_invert(matrix4x4 out, const matrix4x4 m);
 
 void matrix4x4_init_orthographic(matrix4x4 m, float left, float right, float bottom, float top, float near, float far);
 void matrix4x4_init_frustum(matrix4x4 m, float left, float right, float bottom, float top, float near, float far);
