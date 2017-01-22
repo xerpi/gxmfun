@@ -798,25 +798,12 @@ int main(int argc, char *argv[])
 			set_fragment_default_uniform_data(gxm_clear_fragment_program_u_clear_color_param,
 				sizeof(clear_color) / sizeof(float), clear_color);
 
-			/* Enable the depth/stencil buffer and clear it */
-			sceGxmSetFrontStencilFunc(gxm_context,
-				SCE_GXM_STENCIL_FUNC_NEVER,
-				SCE_GXM_STENCIL_OP_ZERO,
-				SCE_GXM_STENCIL_OP_ZERO,
-				SCE_GXM_STENCIL_OP_ZERO,
-				0, 0xFF);
-
-			sceGxmSetVertexStream(gxm_context, 0, clear_vertices_data);
-			sceGxmDraw(gxm_context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP,
-				SCE_GXM_INDEX_FORMAT_U16, clear_indices_data, 4);
-
-			/* Disable the depth/stencil buffer and clear the color buffer */
 			sceGxmSetFrontStencilFunc(gxm_context,
 				SCE_GXM_STENCIL_FUNC_ALWAYS,
 				SCE_GXM_STENCIL_OP_ZERO,
 				SCE_GXM_STENCIL_OP_ZERO,
 				SCE_GXM_STENCIL_OP_ZERO,
-				0, 0);
+				0, 0xFF);
 
 			sceGxmSetVertexStream(gxm_context, 0, clear_vertices_data);
 			sceGxmDraw(gxm_context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP,
@@ -831,6 +818,8 @@ int main(int argc, char *argv[])
 		 * Step 3: Set the stencil function to GL_NEVER, which makes sure that
 		 *         the stencil test always fails on every pixel drawn.
 		 */
+		sceGxmSetFrontDepthWriteEnable(gxm_context,
+			SCE_GXM_DEPTH_WRITE_DISABLED);
 		sceGxmSetFrontStencilFunc(gxm_context,
 			SCE_GXM_STENCIL_FUNC_NEVER,
 			SCE_GXM_STENCIL_OP_INCR,
@@ -873,6 +862,8 @@ int main(int argc, char *argv[])
 		 * Step 8: Draw the scene using the virtual camera from step 5. This will
 		 *         only draw inside of the portal's frame because of the stencil test.
 		 */
+		sceGxmSetFrontDepthWriteEnable(gxm_context,
+			SCE_GXM_DEPTH_WRITE_ENABLED);
 		sceGxmSetFrontStencilRef(gxm_context, 1);
 		sceGxmSetFrontStencilFunc(gxm_context,
 			SCE_GXM_STENCIL_FUNC_LESS_EQUAL,
@@ -904,38 +895,50 @@ int main(int argc, char *argv[])
 		 *         buffer, and enable drawing to the depth buffer.
 		 * Step 10: Clear the depth buffer.
 		 */
-		/* TODO */
+		sceGxmSetFrontStencilFunc(gxm_context,
+			SCE_GXM_STENCIL_FUNC_ALWAYS,
+			SCE_GXM_STENCIL_OP_KEEP,
+			SCE_GXM_STENCIL_OP_KEEP,
+			SCE_GXM_STENCIL_OP_KEEP,
+			0, 0);
+
+		{
+			sceGxmSetVertexProgram(gxm_context, gxm_disable_color_buffer_vertex_program_patched);
+			sceGxmSetFragmentProgram(gxm_context, gxm_disable_color_buffer_fragment_program_patched);
+
+			sceGxmSetVertexStream(gxm_context, 0, clear_vertices_data);
+			sceGxmDraw(gxm_context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP,
+				SCE_GXM_INDEX_FORMAT_U16, clear_indices_data, 4);
+		}
 
 		/*
 		 * Step 10: Draw the portal frame once again, this time
 		 *          to the depth buffer which was just cleared.
 		 */
-		/* TODO */
+		{
+			sceGxmSetVertexProgram(gxm_context, gxm_disable_color_buffer_vertex_program_patched);
+			sceGxmSetFragmentProgram(gxm_context, gxm_disable_color_buffer_fragment_program_patched);
+
+			matrix4x4 portal_mvp_matrix;
+			matrix4x4 portal_modelview_matrix;
+
+			matrix4x4_multiply(portal_modelview_matrix,
+				camera.view_matrix, scene_state.portal.end1.model_matrix);
+			matrix4x4_multiply(portal_mvp_matrix,
+				projection_matrix, portal_modelview_matrix);
+
+			set_vertex_default_uniform_data(gxm_disable_color_buffer_vertex_program_u_mvp_matrix_param,
+				sizeof(portal_mvp_matrix) / sizeof(float), portal_mvp_matrix);
+
+			sceGxmSetVertexStream(gxm_context, 0, portal_mesh_data);
+			sceGxmDraw(gxm_context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP,
+				SCE_GXM_INDEX_FORMAT_U16, portal_indices_data, 4);
+		}
 
 		/*
 		 * Step 11: Enable the color buffer again.
 		 * step 12: Draw the whole scene with the regular camera.
 		 */
-		/* TODO */
-
-		/*
-		 * "Disable" stencil
-		 */
-
-		sceGxmSetFrontStencilRef(gxm_context, 1);
-		sceGxmSetFrontStencilFunc(gxm_context,
-			SCE_GXM_STENCIL_FUNC_GREATER,
-			SCE_GXM_STENCIL_OP_KEEP,
-			SCE_GXM_STENCIL_OP_KEEP,
-			SCE_GXM_STENCIL_OP_KEEP,
-			0xFF, 0);
-		/*sceGxmSetFrontStencilFunc(gxm_context,
-			SCE_GXM_STENCIL_FUNC_ALWAYS,
-			SCE_GXM_STENCIL_OP_KEEP,
-			SCE_GXM_STENCIL_OP_KEEP,
-			SCE_GXM_STENCIL_OP_KEEP,
-			0, 0);*/
-
 		draw_scene(&scene_state, projection_matrix, camera.view_matrix);
 
 		sceGxmEndScene(gxm_context, NULL, NULL);
@@ -1110,6 +1113,26 @@ static void draw_scene(const struct scene_state *state, matrix4x4 projection_mat
 			&gxm_cube_fragment_program_phong_material_params);
 		set_cube_matrices_uniform_params(cube_mvp_matrix,
 			cube_modelview_matrix, cube_normal_matrix);
+
+		sceGxmSetVertexStream(gxm_context, 0, cube_mesh_data);
+		sceGxmDraw(gxm_context, SCE_GXM_PRIMITIVE_TRIANGLES,
+			SCE_GXM_INDEX_FORMAT_U16, cube_indices_data, 36);
+
+		matrix4x4 model;
+		matrix4x4 mv;
+		matrix4x4 mvp;
+		matrix3x3 norm;
+		matrix4x4_init_translation(model, 0.0f, 2.0f, 1.5f);
+		matrix4x4_multiply(mv, view_matrix, model);
+		matrix4x4_multiply(mvp, projection_matrix, mv);
+		matrix3x3_normal_matrix(norm, mv);
+
+		set_cube_fragment_light_uniform_params(&state->light,
+			&gxm_cube_fragment_program_light_params);
+		set_cube_fragment_material_uniform_params(&cube_material,
+			&gxm_cube_fragment_program_phong_material_params);
+		set_cube_matrices_uniform_params(mvp,
+			mv, norm);
 
 		sceGxmSetVertexStream(gxm_context, 0, cube_mesh_data);
 		sceGxmDraw(gxm_context, SCE_GXM_PRIMITIVE_TRIANGLES,
