@@ -53,6 +53,22 @@ struct light {
 	vector3f color;
 };
 
+struct scene_state {
+	/* Cube parameters */
+	float trans_x;
+	float trans_y;
+	float trans_z;
+	float rot_y;
+	float rot_x;
+
+	/* Light parameters */
+	float light_distance;
+	float light_x_rot;
+	float light_y_rot;
+
+	struct light light;
+};
+
 struct phong_material_gxm_params {
 	const SceGxmProgramParameter *ambient;
 	const SceGxmProgramParameter *diffuse;
@@ -137,6 +153,11 @@ static struct light_gxm_params gxm_cube_fragment_program_light_params;
 static SceGxmVertexProgram *gxm_cube_vertex_program_patched;
 static SceGxmFragmentProgram *gxm_cube_fragment_program_patched;
 
+static struct mesh_vertex *cube_mesh_data;
+static unsigned short *cube_indices_data;
+static struct mesh_vertex *floor_mesh_data;
+static unsigned short *floor_indices_data;
+
 static void set_vertex_default_uniform_data(const SceGxmProgramParameter *param,
 	unsigned int component_count, const void *data);
 static void set_fragment_default_uniform_data(const SceGxmProgramParameter *param,
@@ -145,8 +166,11 @@ static void set_cube_fragment_material_uniform_params(const struct phong_materia
 	const struct phong_material_gxm_params *params);
 static void set_cube_matrices_uniform_params(matrix4x4 mvp_matrix,
 	matrix4x4 modelview_matrix, matrix3x3 normal_matrix);
-static void set_cube_fragment_light_uniform_params(const vector3f *light_position_eyespace,
-	const vector3f *light_color, const struct light_gxm_params *params);
+static void set_cube_fragment_light_uniform_params(const struct light *light,
+	const struct light_gxm_params *params);
+
+static void draw_scene(const struct scene_state *state, matrix4x4 projection_matrix, matrix4x4 view_matrix);
+static void update_scene(struct scene_state *state, const struct camera *camera);
 
 static void *gpu_alloc_map(SceKernelMemBlockType type, SceGxmMemoryAttribFlags gpu_attrib, size_t size, SceUID *uid);
 static void gpu_unmap_free(SceUID uid);
@@ -474,12 +498,12 @@ int main(int argc, char *argv[])
 		&gxm_cube_fragment_program_patched);
 
 	SceUID cube_mesh_uid;
-	struct mesh_vertex *const cube_mesh_data = gpu_alloc_map(
+	cube_mesh_data = gpu_alloc_map(
 		SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE, SCE_GXM_MEMORY_ATTRIB_READ,
 		36 * sizeof(struct mesh_vertex), &cube_mesh_uid);
 
 	SceUID cube_indices_uid;
-	unsigned short *const cube_indices_data = gpu_alloc_map(
+	cube_indices_data = gpu_alloc_map(
 		SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE, SCE_GXM_MEMORY_ATTRIB_READ,
 		36 * sizeof(unsigned short), &cube_indices_uid);
 
@@ -560,12 +584,12 @@ int main(int argc, char *argv[])
 		cube_indices_data[i] = i;
 
 	SceUID floor_mesh_uid;
-	struct mesh_vertex *const floor_mesh_data = gpu_alloc_map(
+	floor_mesh_data = gpu_alloc_map(
 		SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE, SCE_GXM_MEMORY_ATTRIB_READ,
 		4 * sizeof(struct mesh_vertex), &floor_mesh_uid);
 
 	SceUID floor_indices_uid;
-	unsigned short *const floor_indices_data = gpu_alloc_map(
+	floor_indices_data = gpu_alloc_map(
 		SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE, SCE_GXM_MEMORY_ATTRIB_READ,
 		4 * sizeof(unsigned short), &floor_indices_uid);
 
@@ -610,30 +634,6 @@ int main(int argc, char *argv[])
 		{.x = +PORTAL_SIZE, .y = -PORTAL_SIZE, .z = 0.0f}
 	};
 
-	static const vector3f portal_normal = {
-		.x = 0.0f, .y = 0.0f, .z = 1.0f
-	};
-
-	static const struct {
-		float width;
-		float height;
-		struct {
-			vector3f position;
-			vector3f normal;
-		} end1, end2;
-	} portal = {
-		.width = PORTAL_SIZE,
-		.height = PORTAL_SIZE,
-		.end1 = {
-			.position = {.x = 0.0f, .y = PORTAL_SIZE / 2, .z = 0.0f},
-			.normal = {.x = 0.0f, .y = 0.0f, .z = 1.0f}
-		},
-		.end2 = {
-			.position = {.x = 0.0f, .y = PORTAL_SIZE / 2, .z = -5.0f},
-			.normal = {.x = 1.0f, .y = 0.0f, .z = 0.0f}
-		}
-	};
-
 	for (i = 0; i < 4; i++) {
 		portal_mesh_data[i] = (struct position_vertex){portal_vertices[i]};
 		portal_indices_data[i] = i;
@@ -660,15 +660,16 @@ int main(int argc, char *argv[])
 	struct camera camera;
 	camera_init(&camera, &camera_initial_pos, &camera_initial_rot);
 
-	float trans_x = 0.0f;
-	float trans_y = CUBE_SIZE + 0.1f;
-	float trans_z = 0.0f;
-	float rot_y = 0.0f; //DEG_TO_RAD(45.0f);
-	float rot_x = 0.0f; //DEG_TO_RAD(45.0f);
+	struct scene_state scene_state;
+	scene_state.trans_x = 0.0f;
+	scene_state.trans_y = CUBE_SIZE + 0.1f;
+	scene_state.trans_z = 0.0f;
+	scene_state.rot_y = 0.0f; //DEG_TO_RAD(45.0f);
+	scene_state.rot_x = 0.0f; //DEG_TO_RAD(45.0f);
 
-	static const float light_distance = 6.0f;
-	static const float light_x_rot = DEG_TO_RAD(20.0f);
-	float light_y_rot = 0.0f;
+	scene_state.light_distance = 6.0f;
+	scene_state.light_x_rot = DEG_TO_RAD(20.0f);
+	scene_state.light_y_rot = 0.0f;
 
 	static int run = 1;
 	while (run) {
@@ -713,30 +714,16 @@ int main(int argc, char *argv[])
 		camera_update_view_matrix(&camera);
 
 		if (pad.buttons & SCE_CTRL_RIGHT)
-			rot_y += 0.025f;
+			scene_state.rot_y += 0.025f;
 		else if (pad.buttons & SCE_CTRL_LEFT)
-			rot_y -= 0.025f;
+			scene_state.rot_y -= 0.025f;
 
 		if (pad.buttons & SCE_CTRL_SQUARE)
-			rot_x += 0.025f;
+			scene_state.rot_x += 0.025f;
 		else if (pad.buttons & SCE_CTRL_CIRCLE)
-			rot_x -= 0.025f;
+			scene_state.rot_x -= 0.025f;
 
-		struct light light = {
-			.position = {
-				.x = light_distance * cosf(light_x_rot) * cosf(light_y_rot),
-				.y = light_distance * sinf(light_x_rot),
-				.z = light_distance * cosf(light_x_rot) * sinf(light_y_rot) + 3.0f
-			},
-			.color = {.r = 1.0f, .g = 1.0f, .b = 1.0f}
-		};
-
-		light_y_rot += 0.1f;
-
-		vector3f light_position_eyespace;
-		vector3f_matrix4x4_mult(&light_position_eyespace,
-			camera.view_matrix, &light.position);
-
+		update_scene(&scene_state, &camera);
 
 		sceGxmBeginScene(gxm_context,
 			0,
@@ -764,7 +751,7 @@ int main(int argc, char *argv[])
 				SCE_GXM_STENCIL_OP_ZERO,
 				SCE_GXM_STENCIL_OP_ZERO,
 				SCE_GXM_STENCIL_OP_ZERO,
-				0, 0);
+				0, 0xFF);
 
 			sceGxmSetVertexStream(gxm_context, 0, clear_vertices_data);
 			sceGxmDraw(gxm_context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP,
@@ -869,72 +856,7 @@ int main(int argc, char *argv[])
 			SCE_GXM_STENCIL_OP_KEEP,
 			0, 0);*/
 
-		sceGxmSetVertexProgram(gxm_context, gxm_cube_vertex_program_patched);
-		sceGxmSetFragmentProgram(gxm_context, gxm_cube_fragment_program_patched);
-
-		{ /* Draw the cube */
-			static const struct phong_material cube_material = {
-				.ambient = {.r = 0.2f, .g = 0.2f, .b = 0.2f},
-				.diffuse = {.r = 0.6f, .g = 0.6f, .b = 0.6f},
-				.specular = {.r = 0.6f, .g = 0.6f, .b = 0.6f},
-				.shininess = 40.0f
-			};
-
-			matrix4x4 cube_mvp_matrix;
-			matrix4x4 cube_modelview_matrix;
-			matrix3x3 cube_normal_matrix;
-			matrix4x4 cube_model_matrix;
-
-			matrix4x4_init_translation(cube_model_matrix, trans_x, trans_y, trans_z);
-			matrix4x4_rotate_y(cube_model_matrix, rot_y);
-			matrix4x4_rotate_x(cube_model_matrix, rot_x);
-
-			matrix4x4_multiply(cube_modelview_matrix, camera.view_matrix, cube_model_matrix);
-			matrix4x4_multiply(cube_mvp_matrix, projection_matrix, cube_modelview_matrix);
-			matrix3x3_normal_matrix(cube_normal_matrix, cube_modelview_matrix);
-
-			set_cube_fragment_light_uniform_params(&light_position_eyespace,
-				&light.color, &gxm_cube_fragment_program_light_params);
-			set_cube_fragment_material_uniform_params(&cube_material,
-				&gxm_cube_fragment_program_phong_material_params);
-			set_cube_matrices_uniform_params(cube_mvp_matrix,
-				cube_modelview_matrix, cube_normal_matrix);
-
-			sceGxmSetVertexStream(gxm_context, 0, cube_mesh_data);
-			sceGxmDraw(gxm_context, SCE_GXM_PRIMITIVE_TRIANGLES,
-				SCE_GXM_INDEX_FORMAT_U16, cube_indices_data, 36);
-		}
-
-		{ /* Draw the floor */
-			static const struct phong_material floor_material = {
-				.ambient = {.r = 0.1f, .g = 0.1f, .b = 0.1f},
-				.diffuse = {.r = 0.4f, .g = 0.4f, .b = 0.4f},
-				.specular = {.r = 0.7f, .g = 0.7f, .b = 0.7f},
-				.shininess = 20.0f
-			};
-
-			matrix4x4 floor_mvp_matrix;
-			matrix4x4 floor_modelview_matrix;
-			matrix3x3 floor_normal_matrix;
-			matrix4x4 floor_model_matrix;
-
-			matrix4x4_identity(floor_model_matrix);
-
-			matrix4x4_multiply(floor_modelview_matrix, camera.view_matrix, floor_model_matrix);
-			matrix4x4_multiply(floor_mvp_matrix, projection_matrix, floor_modelview_matrix);
-			matrix3x3_normal_matrix(floor_normal_matrix, floor_modelview_matrix);
-
-			set_cube_fragment_light_uniform_params(&light_position_eyespace,
-				&light.color, &gxm_cube_fragment_program_light_params);
-			set_cube_fragment_material_uniform_params(&floor_material,
-				&gxm_cube_fragment_program_phong_material_params);
-			set_cube_matrices_uniform_params(floor_mvp_matrix,
-				floor_modelview_matrix, floor_normal_matrix);
-
-			sceGxmSetVertexStream(gxm_context, 0, floor_mesh_data);
-			sceGxmDraw(gxm_context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP,
-				SCE_GXM_INDEX_FORMAT_U16, floor_indices_data, 4);
-		}
+		draw_scene(&scene_state, projection_matrix, camera.view_matrix);
 
 		sceGxmEndScene(gxm_context, NULL, NULL);
 
@@ -1020,13 +942,98 @@ int main(int argc, char *argv[])
 	return 0;
 }
 
-static void set_cube_fragment_light_uniform_params(const vector3f *light_position_eyespace,
-	const vector3f *light_color, const struct light_gxm_params *params)
+static void update_scene(struct scene_state *state, const struct camera *camera)
+{
+	vector3f light_position;
+	light_position.x = state->light_distance * cosf(state->light_x_rot) * cosf(state->light_y_rot);
+	light_position.y = state->light_distance * sinf(state->light_x_rot);
+	light_position.z = state->light_distance * cosf(state->light_x_rot) * sinf(state->light_y_rot) + 3.0f;
+
+	state->light_y_rot += 0.1f;
+
+	vector3f_matrix4x4_mult(&state->light.position,
+		camera->view_matrix, &light_position);
+	state->light.color = (vector3f){.r = 1.0f, .g = 1.0f, .b = 1.0f};
+}
+
+static void draw_scene(const struct scene_state *state, matrix4x4 projection_matrix, matrix4x4 view_matrix)
+{
+	sceGxmSetVertexProgram(gxm_context, gxm_cube_vertex_program_patched);
+	sceGxmSetFragmentProgram(gxm_context, gxm_cube_fragment_program_patched);
+
+	{ /* Draw the cube */
+		static const struct phong_material cube_material = {
+			.ambient = {.r = 0.2f, .g = 0.2f, .b = 0.2f},
+			.diffuse = {.r = 0.6f, .g = 0.6f, .b = 0.6f},
+			.specular = {.r = 0.6f, .g = 0.6f, .b = 0.6f},
+			.shininess = 40.0f
+		};
+
+		matrix4x4 cube_mvp_matrix;
+		matrix4x4 cube_modelview_matrix;
+		matrix3x3 cube_normal_matrix;
+		matrix4x4 cube_model_matrix;
+
+		matrix4x4_init_translation(cube_model_matrix,
+			state->trans_x, state->trans_y, state->trans_z);
+		matrix4x4_rotate_y(cube_model_matrix, state->rot_y);
+		matrix4x4_rotate_x(cube_model_matrix, state->rot_x);
+
+		matrix4x4_multiply(cube_modelview_matrix, view_matrix, cube_model_matrix);
+		matrix4x4_multiply(cube_mvp_matrix, projection_matrix, cube_modelview_matrix);
+		matrix3x3_normal_matrix(cube_normal_matrix, cube_modelview_matrix);
+
+		set_cube_fragment_light_uniform_params(&state->light,
+			&gxm_cube_fragment_program_light_params);
+		set_cube_fragment_material_uniform_params(&cube_material,
+			&gxm_cube_fragment_program_phong_material_params);
+		set_cube_matrices_uniform_params(cube_mvp_matrix,
+			cube_modelview_matrix, cube_normal_matrix);
+
+		sceGxmSetVertexStream(gxm_context, 0, cube_mesh_data);
+		sceGxmDraw(gxm_context, SCE_GXM_PRIMITIVE_TRIANGLES,
+			SCE_GXM_INDEX_FORMAT_U16, cube_indices_data, 36);
+	}
+
+	{ /* Draw the floor */
+		static const struct phong_material floor_material = {
+			.ambient = {.r = 0.1f, .g = 0.1f, .b = 0.1f},
+			.diffuse = {.r = 0.4f, .g = 0.4f, .b = 0.4f},
+			.specular = {.r = 0.7f, .g = 0.7f, .b = 0.7f},
+			.shininess = 20.0f
+		};
+
+		matrix4x4 floor_mvp_matrix;
+		matrix4x4 floor_modelview_matrix;
+		matrix3x3 floor_normal_matrix;
+		matrix4x4 floor_model_matrix;
+
+		matrix4x4_identity(floor_model_matrix);
+
+		matrix4x4_multiply(floor_modelview_matrix, view_matrix, floor_model_matrix);
+		matrix4x4_multiply(floor_mvp_matrix, projection_matrix, floor_modelview_matrix);
+		matrix3x3_normal_matrix(floor_normal_matrix, floor_modelview_matrix);
+
+		set_cube_fragment_light_uniform_params(&state->light,
+			&gxm_cube_fragment_program_light_params);
+		set_cube_fragment_material_uniform_params(&floor_material,
+			&gxm_cube_fragment_program_phong_material_params);
+		set_cube_matrices_uniform_params(floor_mvp_matrix,
+			floor_modelview_matrix, floor_normal_matrix);
+
+		sceGxmSetVertexStream(gxm_context, 0, floor_mesh_data);
+		sceGxmDraw(gxm_context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP,
+			SCE_GXM_INDEX_FORMAT_U16, floor_indices_data, 4);
+	}
+}
+
+static void set_cube_fragment_light_uniform_params(const struct light *light,
+	const struct light_gxm_params *params)
 {
 	set_fragment_default_uniform_data(params->position,
-		sizeof(*light_position_eyespace) / sizeof(float), light_position_eyespace);
+		sizeof(light->position) / sizeof(float), &light->position);
 	set_fragment_default_uniform_data(params->color,
-		sizeof(*light_color) / sizeof(float), light_color);
+		sizeof(light->color) / sizeof(float), &light->color);
 }
 
 static void set_cube_matrices_uniform_params(matrix4x4 mvp_matrix,
