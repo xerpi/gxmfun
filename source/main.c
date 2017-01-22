@@ -26,6 +26,10 @@ struct clear_vertex {
 	vector2f position;
 };
 
+struct position_vertex {
+	vector3f position;
+};
+
 struct color_vertex {
 	vector3f position;
 	vector4f color;
@@ -65,11 +69,15 @@ struct display_queue_callback_data {
 	void *addr;
 };
 
+extern unsigned char _binary_disable_color_buffer_v_gxp_start;
+extern unsigned char _binary_disable_color_buffer_f_gxp_start;
 extern unsigned char _binary_clear_v_gxp_start;
 extern unsigned char _binary_clear_f_gxp_start;
 extern unsigned char _binary_cube_v_gxp_start;
 extern unsigned char _binary_cube_f_gxp_start;
 
+static const SceGxmProgram *const gxm_program_disable_color_buffer_v = (SceGxmProgram *)&_binary_disable_color_buffer_v_gxp_start;
+static const SceGxmProgram *const gxm_program_disable_color_buffer_f = (SceGxmProgram *)&_binary_disable_color_buffer_f_gxp_start;
 static const SceGxmProgram *const gxm_program_clear_v = (SceGxmProgram *)&_binary_clear_v_gxp_start;
 static const SceGxmProgram *const gxm_program_clear_f = (SceGxmProgram *)&_binary_clear_f_gxp_start;
 static const SceGxmProgram *const gxm_program_cube_v = (SceGxmProgram *)&_binary_cube_v_gxp_start;
@@ -101,6 +109,13 @@ static SceUID gxm_shader_patcher_vertex_usse_uid;
 static void *gxm_shader_patcher_vertex_usse_addr;
 static SceUID gxm_shader_patcher_fragment_usse_uid;
 static void *gxm_shader_patcher_fragment_usse_addr;
+
+static SceGxmShaderPatcherId gxm_disable_color_buffer_vertex_program_id;
+static SceGxmShaderPatcherId gxm_disable_color_buffer_fragment_program_id;
+static const SceGxmProgramParameter *gxm_disable_color_buffer_vertex_program_position_param;
+static const SceGxmProgramParameter *gxm_disable_color_buffer_vertex_program_u_mvp_matrix_param;
+static SceGxmVertexProgram *gxm_disable_color_buffer_vertex_program_patched;
+static SceGxmFragmentProgram *gxm_disable_color_buffer_fragment_program_patched;
 
 static SceGxmShaderPatcherId gxm_clear_vertex_program_id;
 static SceGxmShaderPatcherId gxm_clear_fragment_program_id;
@@ -283,9 +298,57 @@ int main(int argc, char *argv[])
 
 	sceGxmShaderPatcherCreate(&shader_patcher_params, &gxm_shader_patcher);
 
+	sceGxmShaderPatcherRegisterProgram(gxm_shader_patcher, gxm_program_disable_color_buffer_v,
+		&gxm_disable_color_buffer_vertex_program_id);
+	sceGxmShaderPatcherRegisterProgram(gxm_shader_patcher, gxm_program_disable_color_buffer_f,
+		&gxm_disable_color_buffer_fragment_program_id);
+
+	const SceGxmProgram *disable_color_buffer_vertex_program =
+		sceGxmShaderPatcherGetProgramFromId(gxm_disable_color_buffer_vertex_program_id);
+	const SceGxmProgram *disable_color_buffer_fragment_program =
+		sceGxmShaderPatcherGetProgramFromId(gxm_disable_color_buffer_fragment_program_id);
+
+	gxm_disable_color_buffer_vertex_program_position_param = sceGxmProgramFindParameterByName(
+		disable_color_buffer_vertex_program, "position");
+
+	gxm_disable_color_buffer_vertex_program_u_mvp_matrix_param = sceGxmProgramFindParameterByName(
+		disable_color_buffer_vertex_program, "u_mvp_matrix");
+
+	SceGxmVertexAttribute disable_color_buffer_attributes;
+	SceGxmVertexStream disable_color_buffer_stream;
+	disable_color_buffer_attributes.streamIndex = 0;
+	disable_color_buffer_attributes.offset = 0;
+	disable_color_buffer_attributes.format = SCE_GXM_ATTRIBUTE_FORMAT_F32;
+	disable_color_buffer_attributes.componentCount = 3;
+	disable_color_buffer_attributes.regIndex = sceGxmProgramParameterGetResourceIndex(
+		gxm_disable_color_buffer_vertex_program_position_param);
+	disable_color_buffer_stream.stride = sizeof(struct position_vertex);
+	disable_color_buffer_stream.indexSource = SCE_GXM_INDEX_SOURCE_INDEX_16BIT;
+
+	sceGxmShaderPatcherCreateVertexProgram(gxm_shader_patcher,
+		gxm_disable_color_buffer_vertex_program_id, &disable_color_buffer_attributes,
+		1, &disable_color_buffer_stream, 1, &gxm_disable_color_buffer_vertex_program_patched);
+
+	SceGxmBlendInfo disable_color_buffer_blend_info;
+	memset(&disable_color_buffer_blend_info, 0, sizeof(disable_color_buffer_blend_info));
+	disable_color_buffer_blend_info.colorMask = SCE_GXM_COLOR_MASK_NONE;
+	disable_color_buffer_blend_info.colorFunc = SCE_GXM_BLEND_FUNC_NONE;
+	disable_color_buffer_blend_info.alphaFunc = SCE_GXM_BLEND_FUNC_NONE;
+	disable_color_buffer_blend_info.colorSrc = SCE_GXM_BLEND_FACTOR_ZERO;
+	disable_color_buffer_blend_info.colorDst = SCE_GXM_BLEND_FACTOR_ZERO;
+	disable_color_buffer_blend_info.alphaSrc = SCE_GXM_BLEND_FACTOR_ZERO;
+	disable_color_buffer_blend_info.alphaDst = SCE_GXM_BLEND_FACTOR_ZERO;
+
+	sceGxmShaderPatcherCreateFragmentProgram(gxm_shader_patcher,
+		gxm_disable_color_buffer_fragment_program_id,
+		SCE_GXM_OUTPUT_REGISTER_FORMAT_UCHAR4,
+		SCE_GXM_MULTISAMPLE_NONE,
+		&disable_color_buffer_blend_info,
+		disable_color_buffer_fragment_program,
+		&gxm_disable_color_buffer_fragment_program_patched);
+
 	sceGxmShaderPatcherRegisterProgram(gxm_shader_patcher, gxm_program_clear_v,
 		&gxm_clear_vertex_program_id);
-
 	sceGxmShaderPatcherRegisterProgram(gxm_shader_patcher, gxm_program_clear_f,
 		&gxm_clear_fragment_program_id);
 
@@ -342,7 +405,6 @@ int main(int argc, char *argv[])
 
 	sceGxmShaderPatcherRegisterProgram(gxm_shader_patcher, gxm_program_cube_v,
 		&gxm_cube_vertex_program_id);
-
 	sceGxmShaderPatcherRegisterProgram(gxm_shader_patcher, gxm_program_cube_f,
 		&gxm_cube_fragment_program_id);
 
@@ -529,6 +591,54 @@ int main(int argc, char *argv[])
 		floor_indices_data[i] = i;
 	}
 
+	SceUID portal_mesh_uid;
+	struct position_vertex *const portal_mesh_data = gpu_alloc_map(
+		SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE, SCE_GXM_MEMORY_ATTRIB_READ,
+		4 * sizeof(struct position_vertex), &portal_mesh_uid);
+
+	SceUID portal_indices_uid;
+	unsigned short *const portal_indices_data = gpu_alloc_map(
+		SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE, SCE_GXM_MEMORY_ATTRIB_READ,
+		4 * sizeof(unsigned short), &portal_indices_uid);
+
+	#define PORTAL_SIZE 2.0f
+
+	static const vector3f portal_vertices[] = {
+		{.x = -PORTAL_SIZE, .y = +PORTAL_SIZE, .z = 0.0f},
+		{.x = -PORTAL_SIZE, .y = -PORTAL_SIZE, .z = 0.0f},
+		{.x = +PORTAL_SIZE, .y = +PORTAL_SIZE, .z = 0.0f},
+		{.x = +PORTAL_SIZE, .y = -PORTAL_SIZE, .z = 0.0f}
+	};
+
+	static const vector3f portal_normal = {
+		.x = 0.0f, .y = 0.0f, .z = 1.0f
+	};
+
+	static const struct {
+		float width;
+		float height;
+		struct {
+			vector3f position;
+			vector3f normal;
+		} end1, end2;
+	} portal = {
+		.width = PORTAL_SIZE,
+		.height = PORTAL_SIZE,
+		.end1 = {
+			.position = {.x = 0.0f, .y = PORTAL_SIZE / 2, .z = 0.0f},
+			.normal = {.x = 0.0f, .y = 0.0f, .z = 1.0f}
+		},
+		.end2 = {
+			.position = {.x = 0.0f, .y = PORTAL_SIZE / 2, .z = -5.0f},
+			.normal = {.x = 1.0f, .y = 0.0f, .z = 0.0f}
+		}
+	};
+
+	for (i = 0; i < 4; i++) {
+		portal_mesh_data[i] = (struct position_vertex){portal_vertices[i]};
+		portal_indices_data[i] = i;
+	}
+
 	gxm_front_buffer_index = 0;
 	gxm_back_buffer_index = 0;
 
@@ -612,34 +722,6 @@ int main(int argc, char *argv[])
 		else if (pad.buttons & SCE_CTRL_CIRCLE)
 			rot_x -= 0.025f;
 
-		sceGxmBeginScene(gxm_context,
-			0,
-			gxm_render_target,
-			NULL,
-			NULL,
-			gxm_sync_objects[gxm_back_buffer_index],
-			&gxm_color_surfaces[gxm_back_buffer_index],
-			&gxm_depth_stencil_surface);
-
-		sceGxmSetVertexProgram(gxm_context, gxm_clear_vertex_program_patched);
-		sceGxmSetFragmentProgram(gxm_context, gxm_clear_fragment_program_patched);
-
-		{ /* Clear the screen */
-			static const float clear_color[4] = {
-				1.0f, 1.0f, 1.0f, 1.0f
-			};
-
-			set_fragment_default_uniform_data(gxm_clear_fragment_program_u_clear_color_param,
-				sizeof(clear_color) / sizeof(float), clear_color);
-
-			sceGxmSetVertexStream(gxm_context, 0, clear_vertices_data);
-			sceGxmDraw(gxm_context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP,
-				SCE_GXM_INDEX_FORMAT_U16, clear_indices_data, 4);
-		}
-
-		sceGxmSetVertexProgram(gxm_context, gxm_cube_vertex_program_patched);
-		sceGxmSetFragmentProgram(gxm_context, gxm_cube_fragment_program_patched);
-
 		struct light light = {
 			.position = {
 				.x = light_distance * cosf(light_x_rot) * cosf(light_y_rot),
@@ -654,6 +736,141 @@ int main(int argc, char *argv[])
 		vector3f light_position_eyespace;
 		vector3f_matrix4x4_mult(&light_position_eyespace,
 			camera.view_matrix, &light.position);
+
+
+		sceGxmBeginScene(gxm_context,
+			0,
+			gxm_render_target,
+			NULL,
+			NULL,
+			gxm_sync_objects[gxm_back_buffer_index],
+			&gxm_color_surfaces[gxm_back_buffer_index],
+			&gxm_depth_stencil_surface);
+
+		{ /* Clear the color and the depth/stencil buffers */
+			sceGxmSetVertexProgram(gxm_context, gxm_clear_vertex_program_patched);
+			sceGxmSetFragmentProgram(gxm_context, gxm_clear_fragment_program_patched);
+
+			static const float clear_color[4] = {
+				1.0f, 1.0f, 1.0f, 1.0f
+			};
+
+			set_fragment_default_uniform_data(gxm_clear_fragment_program_u_clear_color_param,
+				sizeof(clear_color) / sizeof(float), clear_color);
+
+			/* Enable the depth/stencil buffer and clear it */
+			sceGxmSetFrontStencilFunc(gxm_context,
+				SCE_GXM_STENCIL_FUNC_NEVER,
+				SCE_GXM_STENCIL_OP_ZERO,
+				SCE_GXM_STENCIL_OP_ZERO,
+				SCE_GXM_STENCIL_OP_ZERO,
+				0, 0);
+
+			sceGxmSetVertexStream(gxm_context, 0, clear_vertices_data);
+			sceGxmDraw(gxm_context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP,
+				SCE_GXM_INDEX_FORMAT_U16, clear_indices_data, 4);
+
+			/* Disable the depth/stencil buffer and clear the color buffer */
+			sceGxmSetFrontStencilFunc(gxm_context,
+				SCE_GXM_STENCIL_FUNC_ALWAYS,
+				SCE_GXM_STENCIL_OP_ZERO,
+				SCE_GXM_STENCIL_OP_ZERO,
+				SCE_GXM_STENCIL_OP_ZERO,
+				0, 0);
+
+			sceGxmSetVertexStream(gxm_context, 0, clear_vertices_data);
+			sceGxmDraw(gxm_context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP,
+				SCE_GXM_INDEX_FORMAT_U16, clear_indices_data, 4);
+		}
+
+		/*
+		 * Step 1: Disable drawing to the color buffer and the depth buffer,
+		 *         but enable writing to the stencil buffer.
+		 * Step 2: Set the stencil operation to GL_INCR on sfail, meaning that
+		 *         the stencil value will be incremented when the stencil test fails.
+		 * Step 3: Set the stencil function to GL_NEVER, which makes sure that
+		 *         the stencil test always fails on every pixel drawn.
+		 */
+		sceGxmSetFrontStencilFunc(gxm_context,
+			SCE_GXM_STENCIL_FUNC_NEVER,
+			SCE_GXM_STENCIL_OP_INCR,
+			SCE_GXM_STENCIL_OP_KEEP,
+			SCE_GXM_STENCIL_OP_KEEP,
+			0, 0xFF);
+
+		/*
+		 * Step 4: Draw the portal's frame. At this point the stencil buffer is filled
+		 *         with zero's on the outside of the portal's frame and one's on the inside.
+		 */
+		{
+			sceGxmSetVertexProgram(gxm_context, gxm_disable_color_buffer_vertex_program_patched);
+			sceGxmSetFragmentProgram(gxm_context, gxm_disable_color_buffer_fragment_program_patched);
+
+			matrix4x4 disable_color_buffer_mvp_matrix;
+			matrix4x4 disable_color_buffer_modelview_matrix;
+			matrix4x4 disable_color_buffer_model_matrix;
+
+			/* TODO: Portal translation/rotation */
+			matrix4x4_identity(disable_color_buffer_model_matrix);
+
+			matrix4x4_multiply(disable_color_buffer_modelview_matrix,
+				camera.view_matrix, disable_color_buffer_model_matrix);
+			matrix4x4_multiply(disable_color_buffer_mvp_matrix,
+				projection_matrix, disable_color_buffer_modelview_matrix);
+
+			set_vertex_default_uniform_data(gxm_disable_color_buffer_vertex_program_u_mvp_matrix_param,
+				sizeof(disable_color_buffer_mvp_matrix) / sizeof(float), disable_color_buffer_mvp_matrix);
+
+			sceGxmSetVertexStream(gxm_context, 0, portal_mesh_data);
+			sceGxmDraw(gxm_context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP,
+				SCE_GXM_INDEX_FORMAT_U16, portal_indices_data, 4);
+		}
+
+		/*
+		 * Step 5: Generate the virtual camera's view matrix using the view
+		 *         frustum clipping method.
+		 * Step 6: Disable writing to the stencil buffer, but enable drawing to
+		 *         the color buffer and the depth buffer.
+		 * Step 7: Set the stencil function to GL_LEQUAL with reference value 1.
+		 *         This will only draw where the stencil value is greater than
+		 *         or equal to 1, which is inside the portal frame.
+		 * Step 8: Draw the scene using the virtual camera from step 5. This will
+		 *         only draw inside of the portal's frame because of the stencil test.
+		 */
+		sceGxmSetFrontStencilRef(gxm_context, 1);
+		sceGxmSetFrontStencilFunc(gxm_context,
+			SCE_GXM_STENCIL_FUNC_LESS_EQUAL,
+			SCE_GXM_STENCIL_OP_KEEP,
+			SCE_GXM_STENCIL_OP_KEEP,
+			SCE_GXM_STENCIL_OP_KEEP,
+			0xFF, 0);
+		{
+			/*
+			 * Render the scene from the other portal's end view.
+			 */
+		}
+
+
+		/*
+		 * "Disable" stencil
+		 */
+
+		sceGxmSetFrontStencilRef(gxm_context, 1);
+		sceGxmSetFrontStencilFunc(gxm_context,
+			SCE_GXM_STENCIL_FUNC_GREATER,
+			SCE_GXM_STENCIL_OP_KEEP,
+			SCE_GXM_STENCIL_OP_KEEP,
+			SCE_GXM_STENCIL_OP_KEEP,
+			0xFF, 0);
+		/*sceGxmSetFrontStencilFunc(gxm_context,
+			SCE_GXM_STENCIL_FUNC_ALWAYS,
+			SCE_GXM_STENCIL_OP_KEEP,
+			SCE_GXM_STENCIL_OP_KEEP,
+			SCE_GXM_STENCIL_OP_KEEP,
+			0, 0);*/
+
+		sceGxmSetVertexProgram(gxm_context, gxm_cube_vertex_program_patched);
+		sceGxmSetFragmentProgram(gxm_context, gxm_cube_fragment_program_patched);
 
 		{ /* Draw the cube */
 			static const struct phong_material cube_material = {
@@ -745,6 +962,14 @@ int main(int argc, char *argv[])
 
 	gpu_unmap_free(floor_mesh_uid);
 	gpu_unmap_free(floor_indices_uid);
+
+	gpu_unmap_free(portal_mesh_uid);
+	gpu_unmap_free(portal_indices_uid);
+
+	sceGxmShaderPatcherReleaseVertexProgram(gxm_shader_patcher,
+		gxm_disable_color_buffer_vertex_program_patched);
+	sceGxmShaderPatcherReleaseFragmentProgram(gxm_shader_patcher,
+		gxm_disable_color_buffer_fragment_program_patched);
 
 	sceGxmShaderPatcherReleaseVertexProgram(gxm_shader_patcher,
 		gxm_clear_vertex_program_patched);
