@@ -186,6 +186,9 @@ static void update_camera(struct camera *camera, SceCtrlData *pad);
 static void draw_scene(const struct scene_state *state, matrix4x4 projection_matrix, matrix4x4 view_matrix);
 static void update_scene(struct scene_state *state, const struct camera *camera, SceCtrlData *pad);
 
+static void draw_cube(const struct scene_state *state, const matrix4x4 projection_matrix,
+	const matrix4x4 view_matrix, const matrix4x4 model_matrix, const struct phong_material *material);
+
 static void *gpu_alloc_map(SceKernelMemBlockType type, SceGxmMemoryAttribFlags gpu_attrib, size_t size, SceUID *uid);
 static void gpu_unmap_free(SceUID uid);
 static void *gpu_vertex_usse_alloc_map(size_t size, SceUID *uid, unsigned int *usse_offset);
@@ -747,27 +750,27 @@ int main(int argc, char *argv[])
 	camera_init(&camera, &camera_initial_pos, &camera_initial_rot);
 
 	struct scene_state scene_state;
-	scene_state.trans_x = 5.0f;
+	scene_state.trans_x = 0.0f;
 	scene_state.trans_y = CUBE_SIZE + 0.1f;
 	scene_state.trans_z = 0.0f;
 	scene_state.rot_y = 0.0f; //DEG_TO_RAD(45.0f);
 	scene_state.rot_x = 0.0f; //DEG_TO_RAD(45.0f);
 
-	scene_state.light_distance = 6.0f;
+	scene_state.light_distance = 8.0f;
 	scene_state.light_x_rot = DEG_TO_RAD(20.0f);
 	scene_state.light_y_rot = 0.0f;
 
 	scene_state.portal.width = PORTAL_SIZE;
 	scene_state.portal.height = PORTAL_SIZE;
 	matrix4x4_identity(scene_state.portal.end1.model_matrix);
-	matrix4x4_rotate_y(scene_state.portal.end1.model_matrix, M_PI);
 	matrix4x4_translate(scene_state.portal.end1.model_matrix, 0.0f,
 		PORTAL_HALF_SIZE + PORTAL_FRAME_SIZE, 0.0f);
+	matrix4x4_rotate_y(scene_state.portal.end1.model_matrix, M_PI);
 
 	matrix4x4_identity(scene_state.portal.end2.model_matrix);
-	matrix4x4_rotate_y(scene_state.portal.end2.model_matrix, -M_PI / 2.0f);
-	matrix4x4_translate(scene_state.portal.end2.model_matrix, 0.0f,
+	matrix4x4_translate(scene_state.portal.end2.model_matrix, 1.5f,
 		PORTAL_HALF_SIZE + PORTAL_FRAME_SIZE, 0.0f);
+	matrix4x4_rotate_y(scene_state.portal.end2.model_matrix, -M_PI / 2.0f);
 
 	static int run = 1;
 	while (run) {
@@ -939,6 +942,7 @@ int main(int argc, char *argv[])
 		 * Step 11: Enable the color buffer again.
 		 * step 12: Draw the whole scene with the regular camera.
 		 */
+
 		draw_scene(&scene_state, projection_matrix, camera.view_matrix);
 
 		sceGxmEndScene(gxm_context, NULL, NULL);
@@ -1030,26 +1034,42 @@ int main(int argc, char *argv[])
 
 static void update_scene(struct scene_state *state, const struct camera *camera, SceCtrlData *pad)
 {
+	if (pad->buttons & SCE_CTRL_UP)
+		state->trans_z -= 0.025f;
+	else if (pad->buttons & SCE_CTRL_DOWN)
+		state->trans_z += 0.025f;
+
 	if (pad->buttons & SCE_CTRL_RIGHT)
-		state->rot_y += 0.025f;
+		state->trans_x += 0.025f;
 	else if (pad->buttons & SCE_CTRL_LEFT)
-		state->rot_y -= 0.025f;
+		state->trans_x -= 0.025f;
 
 	if (pad->buttons & SCE_CTRL_SQUARE)
-		state->rot_x += 0.025f;
+		state->rot_y += 0.025f;
 	else if (pad->buttons & SCE_CTRL_CIRCLE)
+		state->rot_y -= 0.025f;
+
+	if (pad->buttons & SCE_CTRL_CROSS)
+		state->rot_x += 0.025f;
+	else if (pad->buttons & SCE_CTRL_TRIANGLE)
 		state->rot_x -= 0.025f;
 
 	vector3f light_position;
 	light_position.x = state->light_distance * cosf(state->light_x_rot) * cosf(state->light_y_rot);
 	light_position.y = state->light_distance * sinf(state->light_x_rot);
-	light_position.z = state->light_distance * cosf(state->light_x_rot) * sinf(state->light_y_rot) + 3.0f;
+	light_position.z = state->light_distance * cosf(state->light_x_rot) * sinf(state->light_y_rot);
 
 	state->light_y_rot += 0.1f;
-
 	vector3f_matrix4x4_mult(&state->light.position,
-		camera->view_matrix, &light_position);
+		camera->view_matrix, &light_position, 1.0f);
+
 	state->light.color = (vector3f){.r = 1.0f, .g = 1.0f, .b = 1.0f};
+
+	/*matrix4x4_identity(state->portal.end2.model_matrix);
+	matrix4x4_rotate_y(state->portal.end2.model_matrix, state->rot_y);
+	matrix4x4_rotate_x(state->portal.end2.model_matrix, state->rot_x);
+	matrix4x4_translate(state->portal.end2.model_matrix,
+		0.0f + state->trans_x, 4.0f + state->trans_y, -10.0f + state->trans_z);*/
 }
 
 static void draw_scene(const struct scene_state *state, matrix4x4 projection_matrix, matrix4x4 view_matrix)
@@ -1086,63 +1106,38 @@ static void draw_scene(const struct scene_state *state, matrix4x4 projection_mat
 	}
 
 	{ /* Draw the cube */
-		static const struct phong_material cube_material = {
-			.ambient = {.r = 0.2f, .g = 0.2f, .b = 0.2f},
-			.diffuse = {.r = 0.6f, .g = 0.6f, .b = 0.6f},
+		static const struct phong_material cube1_material = {
+			.ambient = {.r = 0.1f, .g = 0.1f, .b = 0.1f},
+			.diffuse = {.r = 0.8f, .g = 0.8f, .b = 0.8f},
 			.specular = {.r = 0.6f, .g = 0.6f, .b = 0.6f},
-			.shininess = 40.0f
+			.shininess = 80.0f
 		};
 
-		matrix4x4 cube_mvp_matrix;
-		matrix4x4 cube_modelview_matrix;
-		matrix3x3 cube_normal_matrix;
-		matrix4x4 cube_model_matrix;
+		matrix4x4 cube1_model_matrix;
+		matrix4x4_init_translation(cube1_model_matrix,
+			5.0f, CUBE_SIZE + 0.1f, 0.0f);
 
-		matrix4x4_init_translation(cube_model_matrix,
-			state->trans_x, state->trans_y, state->trans_z);
-		matrix4x4_rotate_y(cube_model_matrix, state->rot_y);
-		matrix4x4_rotate_x(cube_model_matrix, state->rot_x);
+		draw_cube(state, projection_matrix, view_matrix,
+			cube1_model_matrix, &cube1_material);
 
-		matrix4x4_multiply(cube_modelview_matrix, view_matrix, cube_model_matrix);
-		matrix4x4_multiply(cube_mvp_matrix, projection_matrix, cube_modelview_matrix);
-		matrix3x3_normal_matrix(cube_normal_matrix, cube_modelview_matrix);
+		static const struct phong_material cube2_material = {
+			.ambient = {.r = 0.1f, .g = 0.1f, .b = 0.1f},
+			.diffuse = {.r = 0.8f, .g = 0.8f, .b = 0.8f},
+			.specular = {.r = 0.6f, .g = 0.6f, .b = 0.6f},
+			.shininess = 80.0f
+		};
 
-		set_cube_fragment_light_uniform_params(&state->light,
-			&gxm_cube_fragment_program_light_params);
-		set_cube_fragment_material_uniform_params(&cube_material,
-			&gxm_cube_fragment_program_phong_material_params);
-		set_cube_matrices_uniform_params(cube_mvp_matrix,
-			cube_modelview_matrix, cube_normal_matrix);
+		matrix4x4 cube2_model_matrix;
+		matrix4x4_init_translation(cube2_model_matrix, 0.0f, 2.0f, 1.5f);
 
-		sceGxmSetVertexStream(gxm_context, 0, cube_mesh_data);
-		sceGxmDraw(gxm_context, SCE_GXM_PRIMITIVE_TRIANGLES,
-			SCE_GXM_INDEX_FORMAT_U16, cube_indices_data, 36);
-
-		matrix4x4 model;
-		matrix4x4 mv;
-		matrix4x4 mvp;
-		matrix3x3 norm;
-		matrix4x4_init_translation(model, 0.0f, 2.0f, 1.5f);
-		matrix4x4_multiply(mv, view_matrix, model);
-		matrix4x4_multiply(mvp, projection_matrix, mv);
-		matrix3x3_normal_matrix(norm, mv);
-
-		set_cube_fragment_light_uniform_params(&state->light,
-			&gxm_cube_fragment_program_light_params);
-		set_cube_fragment_material_uniform_params(&cube_material,
-			&gxm_cube_fragment_program_phong_material_params);
-		set_cube_matrices_uniform_params(mvp,
-			mv, norm);
-
-		sceGxmSetVertexStream(gxm_context, 0, cube_mesh_data);
-		sceGxmDraw(gxm_context, SCE_GXM_PRIMITIVE_TRIANGLES,
-			SCE_GXM_INDEX_FORMAT_U16, cube_indices_data, 36);
+		draw_cube(state, projection_matrix, view_matrix,
+			cube2_model_matrix, &cube2_material);
 	}
 
 	{ /* Draw the floor */
 		static const struct phong_material floor_material = {
 			.ambient = {.r = 0.1f, .g = 0.1f, .b = 0.1f},
-			.diffuse = {.r = 0.4f, .g = 0.4f, .b = 0.4f},
+			.diffuse = {.r = 0.8f, .g = 0.8f, .b = 0.8f},
 			.specular = {.r = 0.7f, .g = 0.7f, .b = 0.7f},
 			.shininess = 20.0f
 		};
@@ -1153,7 +1148,6 @@ static void draw_scene(const struct scene_state *state, matrix4x4 projection_mat
 		matrix4x4 floor_model_matrix;
 
 		matrix4x4_identity(floor_model_matrix);
-
 		matrix4x4_multiply(floor_modelview_matrix, view_matrix, floor_model_matrix);
 		matrix4x4_multiply(floor_mvp_matrix, projection_matrix, floor_modelview_matrix);
 		matrix3x3_normal_matrix(floor_normal_matrix, floor_modelview_matrix);
@@ -1207,6 +1201,29 @@ static void update_camera(struct camera *camera, SceCtrlData *pad)
 	vector3f_add_mult(&camera->position, &camera_right, lateral);
 
 	camera_update_view_matrix(camera);
+}
+
+static void draw_cube(const struct scene_state *state, const matrix4x4 projection_matrix,
+	const matrix4x4 view_matrix, const matrix4x4 model_matrix, const struct phong_material *material)
+{
+	matrix4x4 mvp_matrix;
+	matrix4x4 modelview_matrix;
+	matrix3x3 normal_matrix;
+
+	matrix4x4_multiply(modelview_matrix, view_matrix, model_matrix);
+	matrix4x4_multiply(mvp_matrix, projection_matrix, modelview_matrix);
+	matrix3x3_normal_matrix(normal_matrix, modelview_matrix);
+
+	set_cube_fragment_light_uniform_params(&state->light,
+		&gxm_cube_fragment_program_light_params);
+	set_cube_fragment_material_uniform_params(material,
+		&gxm_cube_fragment_program_phong_material_params);
+	set_cube_matrices_uniform_params(mvp_matrix,
+		modelview_matrix, normal_matrix);
+
+	sceGxmSetVertexStream(gxm_context, 0, cube_mesh_data);
+	sceGxmDraw(gxm_context, SCE_GXM_PRIMITIVE_TRIANGLES,
+		SCE_GXM_INDEX_FORMAT_U16, cube_indices_data, 36);
 }
 
 static void set_cube_fragment_light_uniform_params(const struct light *light,

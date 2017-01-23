@@ -20,10 +20,8 @@ float3 phong_lighting(float3 normal, float3 L, float3 position)
 	/* Ambient */
 	float3 ambient = u_material.ambient;
 
-	float theta = max(0.0f, dot(L, normal));
-
 	/* Diffuse */
-	float3 diffuse = theta * u_material.diffuse;
+	float3 diffuse = max(0.0f, dot(L, normal))  * u_material.diffuse;
 
 	/* Specular */
 	float3 R = reflect(-L, normal);
@@ -40,9 +38,9 @@ void main(
 	float4 color : COLOR,
 	out float4 out_color : COLOR)
 {
-	float3 position_eyespace = mul(float4(position, 1.0f), u_modelview_matrix).xyz;
+	float3 position_eyespace = mul(u_modelview_matrix, float4(position, 1.0f)).xyz;
 	float3 L = normalize(u_light.position - position_eyespace);
-	float3 normal_eyespace = normalize(mul(normal, u_normal_matrix));
+	float3 normal_eyespace = normalize(mul(u_normal_matrix, normal));
 
 	out_color = float4(phong_lighting(normal_eyespace, L, position_eyespace), 1.0f) * color;
 }

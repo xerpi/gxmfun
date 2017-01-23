@@ -34,9 +34,10 @@ void vector3f_add_mult(vector3f *v, const vector3f *u, float a);
 void vector3f_opposite(vector3f *v1, const vector3f *v0);
 float vector3f_dot_product(const vector3f *v1, const vector3f *v2);
 void vector3f_cross_product(vector3f *w, const vector3f *u, const vector3f *v);
-void vector3f_matrix4x4_mult(vector3f *u, const matrix4x4 m, const vector3f *v);
+void vector3f_matrix4x4_mult(vector3f *u, const matrix4x4 m, const vector3f *v, float w);
 
-void matrix3x3_from_matrix4x4(const matrix4x4 src, matrix3x3 dst);
+void matrix3x3_identity(matrix3x3 m);
+void matrix3x3_from_matrix4x4(matrix3x3 dst, const matrix4x4 src);
 
 void matrix4x4_identity(matrix4x4 m);
 void matrix4x4_copy(matrix4x4 dst, const matrix4x4 src);

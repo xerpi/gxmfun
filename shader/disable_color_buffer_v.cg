@@ -3,7 +3,7 @@ float4 main(
 	uniform float4x4 u_mvp_matrix) : POSITION
 {
 
-	return mul(float4(position, 1.0f), u_mvp_matrix);
+	return mul(u_mvp_matrix, float4(position, 1.0f));
 }
 
 
