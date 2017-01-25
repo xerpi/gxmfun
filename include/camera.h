@@ -16,6 +16,4 @@ void camera_get_direction_vector(const struct camera *camera, vector3f *directio
 void camera_get_right_vector(const struct camera *camera, vector3f *right);
 void camera_get_up_vector(const struct camera *camera, vector3f *up);
 
-
-
 #endif

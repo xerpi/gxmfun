@@ -63,12 +63,9 @@ struct portal {
 
 
 struct scene_state {
-	/* Cube parameters */
-	float trans_x;
-	float trans_y;
-	float trans_z;
-	float rot_y;
-	float rot_x;
+	/* Portal's second end parameters */
+	vector3f portal_end2_translation;
+	vector3f portal_end2_rotation;
 
 	/* Light parameters */
 	float light_distance;
@@ -739,38 +736,43 @@ int main(int argc, char *argv[])
 	memset(&pad, 0, sizeof(pad));
 
 	static vector3f camera_initial_pos = {
-		.x = 0.0f, .y = 1.5f, .z = 4.0f
+		.x = 0.0f, .y = 3.0f, .z = 5.0f
 	};
 
 	static vector3f camera_initial_rot = {
-		.x = 0.0f, .y = 0.0f, .z = 0.0f
+		.x = -DEG_TO_RAD(20), .y = 0.0f, .z = 0.0f
 	};
 
 	struct camera camera;
 	camera_init(&camera, &camera_initial_pos, &camera_initial_rot);
 
 	struct scene_state scene_state;
-	scene_state.trans_x = 0.0f;
-	scene_state.trans_y = CUBE_SIZE + 0.1f;
-	scene_state.trans_z = 0.0f;
-	scene_state.rot_y = 0.0f; //DEG_TO_RAD(45.0f);
-	scene_state.rot_x = 0.0f; //DEG_TO_RAD(45.0f);
+	scene_state.portal.width = PORTAL_SIZE;
+	scene_state.portal.height = PORTAL_SIZE;
+
+	static const vector3f portal_end1_translation = {
+		.x = 0.0f, .y = PORTAL_HALF_SIZE + PORTAL_FRAME_SIZE, .z = 0.0f
+	};
+	static const vector3f portal_end1_rotation = {
+		.x = 0.0f, .y = M_PI, .z = 0.0f
+	};
+
+	matrix4x4_build_model_matrix(scene_state.portal.end1.model_matrix,
+		&portal_end1_translation, &portal_end1_rotation);
+
+	scene_state.portal_end2_translation.x = 0.0f;
+	scene_state.portal_end2_translation.y = PORTAL_HALF_SIZE + PORTAL_FRAME_SIZE;
+	scene_state.portal_end2_translation.z = 4.0f;
+	scene_state.portal_end2_rotation.y = 0.0f;
+	scene_state.portal_end2_rotation.x = 0.0f;
+	scene_state.portal_end2_rotation.z = 0.0f;
+
+	matrix4x4_build_model_matrix(scene_state.portal.end2.model_matrix,
+		&scene_state.portal_end2_translation, &scene_state.portal_end2_rotation);
 
 	scene_state.light_distance = 8.0f;
 	scene_state.light_x_rot = DEG_TO_RAD(20.0f);
 	scene_state.light_y_rot = 0.0f;
-
-	scene_state.portal.width = PORTAL_SIZE;
-	scene_state.portal.height = PORTAL_SIZE;
-	matrix4x4_identity(scene_state.portal.end1.model_matrix);
-	matrix4x4_translate(scene_state.portal.end1.model_matrix, 0.0f,
-		PORTAL_HALF_SIZE + PORTAL_FRAME_SIZE, 0.0f);
-	matrix4x4_rotate_y(scene_state.portal.end1.model_matrix, M_PI);
-
-	matrix4x4_identity(scene_state.portal.end2.model_matrix);
-	matrix4x4_translate(scene_state.portal.end2.model_matrix, 1.5f,
-		PORTAL_HALF_SIZE + PORTAL_FRAME_SIZE, 0.0f);
-	matrix4x4_rotate_y(scene_state.portal.end2.model_matrix, -M_PI / 2.0f);
 
 	static int run = 1;
 	while (run) {
@@ -877,18 +879,20 @@ int main(int argc, char *argv[])
 		{
 			/*
 			 * Render the scene from the other portal's end view.
-			 *     P' = M2 * Mreflect * M1^-1 * P
-			 * If V is the camera's view matrix:
-			 *     V' = M2 * M1^-1 * V
+			 * If V is the camera's view matrix,
+			 * for non-static portals:
+			 *     V' = V * M2^-1
 			 */
-			matrix4x4 m1, m2;
+			matrix4x4 m1;
 			matrix4x4 portal_end2_view_matrix;
 
-			matrix4x4_invert(m1, scene_state.portal.end1.model_matrix);
-			matrix4x4_multiply(m2, camera.view_matrix, m1);
+			matrix4x4_invert(m1, scene_state.portal.end2.model_matrix);
+			matrix4x4_multiply(portal_end2_view_matrix, camera.view_matrix, m1);
 
-			matrix4x4_multiply(portal_end2_view_matrix,
-				m2, scene_state.portal.end2.model_matrix);
+			/*
+			 * TODO: Clip projection's matrix zNear plane to
+			 *       the portal's plane.
+			 */
 
 			draw_scene(&scene_state, projection_matrix, portal_end2_view_matrix);
 		}
@@ -898,6 +902,8 @@ int main(int argc, char *argv[])
 		 *         buffer, and enable drawing to the depth buffer.
 		 * Step 10: Clear the depth buffer.
 		 */
+		sceGxmSetFrontDepthFunc(gxm_context,
+			SCE_GXM_DEPTH_FUNC_ALWAYS);
 		sceGxmSetFrontStencilFunc(gxm_context,
 			SCE_GXM_STENCIL_FUNC_ALWAYS,
 			SCE_GXM_STENCIL_OP_KEEP,
@@ -906,13 +912,16 @@ int main(int argc, char *argv[])
 			0, 0);
 
 		{
-			sceGxmSetVertexProgram(gxm_context, gxm_disable_color_buffer_vertex_program_patched);
+			sceGxmSetVertexProgram(gxm_context, gxm_clear_vertex_program_patched);
 			sceGxmSetFragmentProgram(gxm_context, gxm_disable_color_buffer_fragment_program_patched);
 
 			sceGxmSetVertexStream(gxm_context, 0, clear_vertices_data);
 			sceGxmDraw(gxm_context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP,
 				SCE_GXM_INDEX_FORMAT_U16, clear_indices_data, 4);
 		}
+
+		sceGxmSetFrontDepthFunc(gxm_context,
+			SCE_GXM_DEPTH_FUNC_LESS_EQUAL);
 
 		/*
 		 * Step 10: Draw the portal frame once again, this time
@@ -1035,25 +1044,34 @@ int main(int argc, char *argv[])
 static void update_scene(struct scene_state *state, const struct camera *camera, SceCtrlData *pad)
 {
 	if (pad->buttons & SCE_CTRL_UP)
-		state->trans_z -= 0.025f;
+		state->portal_end2_translation.z -= 0.025f;
 	else if (pad->buttons & SCE_CTRL_DOWN)
-		state->trans_z += 0.025f;
+		state->portal_end2_translation.z += 0.025f;
 
 	if (pad->buttons & SCE_CTRL_RIGHT)
-		state->trans_x += 0.025f;
+		state->portal_end2_translation.x += 0.025f;
 	else if (pad->buttons & SCE_CTRL_LEFT)
-		state->trans_x -= 0.025f;
+		state->portal_end2_translation.x -= 0.025f;
 
 	if (pad->buttons & SCE_CTRL_SQUARE)
-		state->rot_y += 0.025f;
+		state->portal_end2_rotation.y += 0.025f;
 	else if (pad->buttons & SCE_CTRL_CIRCLE)
-		state->rot_y -= 0.025f;
+		state->portal_end2_rotation.y -= 0.025f;
 
 	if (pad->buttons & SCE_CTRL_CROSS)
-		state->rot_x += 0.025f;
+		state->portal_end2_rotation.x += 0.025f;
 	else if (pad->buttons & SCE_CTRL_TRIANGLE)
-		state->rot_x -= 0.025f;
+		state->portal_end2_rotation.x -= 0.025f;
 
+	/*
+	 * Update the portal's other end model matrix.
+	 */
+	matrix4x4_build_model_matrix(state->portal.end2.model_matrix,
+		&state->portal_end2_translation, &state->portal_end2_rotation);
+
+	/*
+	 * Update light's attributes.
+	 */
 	vector3f light_position;
 	light_position.x = state->light_distance * cosf(state->light_x_rot) * cosf(state->light_y_rot);
 	light_position.y = state->light_distance * sinf(state->light_x_rot);
@@ -1064,12 +1082,6 @@ static void update_scene(struct scene_state *state, const struct camera *camera,
 		camera->view_matrix, &light_position, 1.0f);
 
 	state->light.color = (vector3f){.r = 1.0f, .g = 1.0f, .b = 1.0f};
-
-	/*matrix4x4_identity(state->portal.end2.model_matrix);
-	matrix4x4_rotate_y(state->portal.end2.model_matrix, state->rot_y);
-	matrix4x4_rotate_x(state->portal.end2.model_matrix, state->rot_x);
-	matrix4x4_translate(state->portal.end2.model_matrix,
-		0.0f + state->trans_x, 4.0f + state->trans_y, -10.0f + state->trans_z);*/
 }
 
 static void draw_scene(const struct scene_state *state, matrix4x4 projection_matrix, matrix4x4 view_matrix)

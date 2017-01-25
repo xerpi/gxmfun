@@ -70,5 +70,7 @@ void matrix4x4_init_perspective(matrix4x4 m, float fov, float aspect, float near
 /* Graphics related */
 
 void matrix3x3_normal_matrix(matrix3x3 out, const matrix4x4 m);
+void matrix4x4_build_model_matrix(matrix4x4 m, const vector3f *translation,
+	const vector3f *rotation);
 
 #endif

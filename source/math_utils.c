@@ -435,3 +435,19 @@ void matrix3x3_normal_matrix(matrix3x3 out, const matrix4x4 m)
 	matrix4x4_transpose(m2, m1);
 	matrix3x3_from_matrix4x4(out, m2);
 }
+
+void matrix4x4_build_model_matrix(matrix4x4 m, const vector3f *translation,
+	const vector3f *rotation)
+{
+	matrix4x4 mt, mrx, mry, mrz;
+	matrix4x4 mtmp1, mtmp2;
+
+	matrix4x4_init_translation_vector3f(mt, translation);
+	matrix4x4_init_rotation_x(mrx, rotation->x);
+	matrix4x4_init_rotation_y(mry, rotation->y);
+	matrix4x4_init_rotation_z(mrz, rotation->z);
+
+	matrix4x4_multiply(mtmp1, mrx, mry);
+	matrix4x4_multiply(mtmp2, mrz, mtmp1);
+	matrix4x4_multiply(m, mt, mtmp2);
+}
