@@ -12,7 +12,7 @@ struct camera {
 void camera_init_zero(struct camera *camera);
 void camera_init(struct camera *camera, const vector3f *pos, const vector3f *rot);
 void camera_update_view_matrix(struct camera *camera);
-void camera_get_direction_vector(const struct camera *camera, vector3f *direction);
+void camera_get_look_vector(const struct camera *camera, vector3f *look);
 void camera_get_right_vector(const struct camera *camera, vector3f *right);
 void camera_get_up_vector(const struct camera *camera, vector3f *up);
 

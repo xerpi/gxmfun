@@ -740,7 +740,8 @@ int main(int argc, char *argv[])
 	};
 
 	static vector3f camera_initial_rot = {
-		.x = -DEG_TO_RAD(20), .y = 0.0f, .z = 0.0f
+		//.x = -DEG_TO_RAD(20), .y = 0.0f, .z = 0.0f
+		.x = 0.0f, .y = 0.0f, .z = 0.0f
 	};
 
 	struct camera camera;
@@ -878,16 +879,28 @@ int main(int argc, char *argv[])
 			0xFF, 0);
 		{
 			/*
-			 * Render the scene from the other portal's end view.
+			 * Render the scene from the other portal's end view:
 			 * If V is the camera's view matrix,
+			 *    M1 is the portal source model matrix,
+			 *    M2 is the portal destination model matrix,
 			 * for non-static portals:
-			 *     V' = V * M2^-1
+			 *     V' = V * M1 * ROT_Y_180 * M2^-1
 			 */
-			matrix4x4 m1;
-			matrix4x4 portal_end2_view_matrix;
 
-			matrix4x4_invert(m1, scene_state.portal.end2.model_matrix);
-			matrix4x4_multiply(portal_end2_view_matrix, camera.view_matrix, m1);
+			matrix4x4 end1_modelview;
+			matrix4x4_multiply(end1_modelview, camera.view_matrix, scene_state.portal.end1.model_matrix);
+
+			matrix4x4 rot_y_180;
+			matrix4x4_init_rotation_y(rot_y_180, M_PI);
+
+			matrix4x4 end1_modelview_rot_y_180;
+			matrix4x4_multiply(end1_modelview_rot_y_180, end1_modelview, rot_y_180);
+
+			matrix4x4 end2_model_inv;
+			matrix4x4_invert(end2_model_inv, scene_state.portal.end2.model_matrix);
+
+			matrix4x4 portal_end2_view_matrix;
+			matrix4x4_multiply(portal_end2_view_matrix, end1_modelview_rot_y_180, end2_model_inv);
 
 			/*
 			 * TODO: Clip projection's matrix zNear plane to
@@ -1179,10 +1192,10 @@ static void draw_scene(const struct scene_state *state, matrix4x4 projection_mat
 
 static void update_camera(struct camera *camera, SceCtrlData *pad)
 {
-	vector3f camera_direction;
+	vector3f camera_look;
 	vector3f camera_right;
 
-	camera_get_direction_vector(camera, &camera_direction);
+	camera_get_look_vector(camera, &camera_look);
 	camera_get_right_vector(camera, &camera_right);
 
 	float forward = 0.0f;
@@ -1209,7 +1222,7 @@ static void update_camera(struct camera *camera, SceCtrlData *pad)
 	else if (pad->buttons & SCE_CTRL_LTRIGGER)
 		camera->position.y -= 0.1f;
 
-	vector3f_add_mult(&camera->position, &camera_direction, forward);
+	vector3f_add_mult(&camera->position, &camera_look, forward);
 	vector3f_add_mult(&camera->position, &camera_right, lateral);
 
 	camera_update_view_matrix(camera);

@@ -32,23 +32,17 @@ void camera_update_view_matrix(struct camera *camera)
 	matrix4x4_multiply(camera->view_matrix, morient, mtrans);
 }
 
-void camera_get_direction_vector(const struct camera *camera, vector3f *direction)
+void camera_get_look_vector(const struct camera *camera, vector3f *look)
 {
-	direction->x = camera->view_matrix[2][0];
-	direction->y = camera->view_matrix[2][1];
-	direction->z = camera->view_matrix[2][2];
+	matrix4x4_get_z_axis(camera->view_matrix, look);
 }
 
 void camera_get_right_vector(const struct camera *camera, vector3f *right)
 {
-	right->x = camera->view_matrix[0][0];
-	right->y = camera->view_matrix[0][1];
-	right->z = camera->view_matrix[0][2];
+	matrix4x4_get_x_axis(camera->view_matrix, right);
 }
 
 void camera_get_up_vector(const struct camera *camera, vector3f *up)
 {
-	up->x = camera->view_matrix[1][0];
-	up->y = camera->view_matrix[1][1];
-	up->z = camera->view_matrix[1][2];
+	matrix4x4_get_y_axis(camera->view_matrix, up);
 }

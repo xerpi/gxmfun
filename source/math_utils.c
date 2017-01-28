@@ -6,6 +6,15 @@
  * Note: matrices are row-major.
  */
 
+static inline float sgn(float a)
+{
+	if (a > 0.0f)
+		return 1.0f;
+	if (a < 0.0f)
+		return -1.0f;
+	return 0.0f;
+}
+
 void vector3f_init(vector3f *v, float x, float y, float z)
 {
 	v->x = x;
@@ -18,6 +27,11 @@ void vector3f_copy(vector3f *dst, const vector3f *src)
 	dst->x = src->x;
 	dst->y = src->y;
 	dst->z = src->z;
+}
+
+float vector3f_length(const vector3f *v)
+{
+	return sqrtf(v->x * v->x + v->y * v->y + v->z * v->z);
 }
 
 void vector3f_add(vector3f *v1, const vector3f *v2)
@@ -65,6 +79,35 @@ void vector3f_matrix4x4_mult(vector3f *u, const matrix4x4 m, const vector3f *v, 
 	u->x = m[0][0] * v->x + m[0][1] * v->y + m[0][2] * v->z + m[0][3] * w;
 	u->y = m[1][0] * v->x + m[1][1] * v->y + m[1][2] * v->z + m[1][3] * w;
 	u->z = m[2][0] * v->x + m[2][1] * v->y + m[2][2] * v->z + m[2][3] * w;
+}
+
+void vector4f_init(vector4f *v, float x, float y, float z, float w)
+{
+	v->x = x;
+	v->y = y;
+	v->z = z;
+	v->w = w;
+}
+
+void vector4f_scalar_mult_dest(vector4f *u, const vector4f *v, float a)
+{
+	u->x = v->x * a;
+	u->y = v->y * a;
+	u->z = v->z * a;
+	u->w = v->w * a;
+}
+
+float vector4f_dot_product(const vector4f *v1, const vector4f *v2)
+{
+	return v1->x * v2->x + v1->y * v2->y + v1->z * v2->z + v1->w * v2->w;
+}
+
+void vector4f_matrix4x4_mult(vector4f *u, const matrix4x4 m, const vector4f *v)
+{
+	u->x = m[0][0] * v->x + m[0][1] * v->y + m[0][2] * v->z + m[0][3] * v->w;
+	u->y = m[1][0] * v->x + m[1][1] * v->y + m[1][2] * v->z + m[1][3] * v->w;
+	u->z = m[2][0] * v->x + m[2][1] * v->y + m[2][2] * v->z + m[2][3] * v->w;
+	u->w = m[3][0] * v->x + m[3][1] * v->y + m[3][2] * v->z + m[3][3] * v->w;
 }
 
 void matrix3x3_identity(matrix3x3 m)
@@ -373,6 +416,27 @@ int matrix4x4_invert(matrix4x4 out, const matrix4x4 m)
 	return 1;
 }
 
+void matrix4x4_get_x_axis(const matrix4x4 m, vector3f *x_axis)
+{
+	x_axis->x = m[0][0];
+	x_axis->y = m[0][1];
+	x_axis->z = m[0][2];
+}
+
+void matrix4x4_get_y_axis(const matrix4x4 m, vector3f *y_axis)
+{
+	y_axis->x = m[1][0];
+	y_axis->y = m[1][1];
+	y_axis->z = m[1][2];
+}
+
+void matrix4x4_get_z_axis(const matrix4x4 m, vector3f *z_axis)
+{
+	z_axis->x = m[2][0];
+	z_axis->y = m[2][1];
+	z_axis->z = m[2][2];
+}
+
 void matrix4x4_init_orthographic(matrix4x4 m, float left, float right, float bottom, float top, float near, float far)
 {
 	m[0][0] = 2.0f / (right - left);
@@ -450,4 +514,28 @@ void matrix4x4_build_model_matrix(matrix4x4 m, const vector3f *translation,
 	matrix4x4_multiply(mtmp1, mrx, mry);
 	matrix4x4_multiply(mtmp2, mrz, mtmp1);
 	matrix4x4_multiply(m, mt, mtmp2);
+}
+
+// Code from http://aras-p.info/texts/obliqueortho.html
+// and http://www.terathon.com/code/oblique.php
+void matrix4x4_oblique_near_plane(matrix4x4 projection, const vector4f *clip_plane)
+{
+	vector4f v;
+	vector4f q;
+	vector4f c;
+	matrix4x4 proj_inv;
+
+	vector4f_init(&v, sgn(clip_plane->x), sgn(clip_plane->y), 1.0f, 1.0f);
+
+	matrix4x4_invert(proj_inv, projection);
+
+	vector4f_matrix4x4_mult(&q, proj_inv, &v);
+
+	vector4f_scalar_mult_dest(&c, clip_plane, 2.0f / vector4f_dot_product(clip_plane, &q));
+
+	// third row = clip plane - fourth row
+	projection[2][0] = c.x - projection[3][0];
+	projection[2][1] = c.y - projection[3][1];
+	projection[2][2] = c.z - projection[3][2];
+	projection[2][3] = c.w - projection[3][3];
 }
