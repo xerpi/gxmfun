@@ -343,8 +343,6 @@ int main(int argc, char *argv[])
 
 	const SceGxmProgram *disable_color_buffer_vertex_program =
 		sceGxmShaderPatcherGetProgramFromId(gxm_disable_color_buffer_vertex_program_id);
-	const SceGxmProgram *disable_color_buffer_fragment_program =
-		sceGxmShaderPatcherGetProgramFromId(gxm_disable_color_buffer_fragment_program_id);
 
 	gxm_disable_color_buffer_vertex_program_position_param = sceGxmProgramFindParameterByName(
 		disable_color_buffer_vertex_program, "position");
@@ -382,7 +380,7 @@ int main(int argc, char *argv[])
 		SCE_GXM_OUTPUT_REGISTER_FORMAT_UCHAR4,
 		SCE_GXM_MULTISAMPLE_NONE,
 		&disable_color_buffer_blend_info,
-		disable_color_buffer_fragment_program,
+		disable_color_buffer_vertex_program,
 		&gxm_disable_color_buffer_fragment_program_patched);
 
 	sceGxmShaderPatcherRegisterProgram(gxm_shader_patcher, gxm_program_clear_v,
@@ -418,7 +416,7 @@ int main(int argc, char *argv[])
 
 	sceGxmShaderPatcherCreateFragmentProgram(gxm_shader_patcher,
 		gxm_clear_fragment_program_id, SCE_GXM_OUTPUT_REGISTER_FORMAT_UCHAR4,
-		SCE_GXM_MULTISAMPLE_NONE, NULL, clear_fragment_program,
+		SCE_GXM_MULTISAMPLE_NONE, NULL, clear_vertex_program,
 		&gxm_clear_fragment_program_patched);
 
 	SceUID clear_vertices_uid;
@@ -508,7 +506,7 @@ int main(int argc, char *argv[])
 
 	sceGxmShaderPatcherCreateFragmentProgram(gxm_shader_patcher,
 		gxm_cube_fragment_program_id, SCE_GXM_OUTPUT_REGISTER_FORMAT_UCHAR4,
-		SCE_GXM_MULTISAMPLE_NONE, NULL, cube_fragment_program,
+		SCE_GXM_MULTISAMPLE_NONE, NULL, cube_vertex_program,
 		&gxm_cube_fragment_program_patched);
 
 	SceUID cube_mesh_uid;
@@ -724,8 +722,7 @@ int main(int argc, char *argv[])
 	portal_frame_indices_data[22] = 10;
 	portal_frame_indices_data[23] = 11;
 
-
-	gxm_front_buffer_index = 0;
+	gxm_front_buffer_index = DISPLAY_BUFFER_COUNT - 1;
 	gxm_back_buffer_index = 0;
 
 	matrix4x4 projection_matrix;
@@ -1358,6 +1355,9 @@ void *gpu_vertex_usse_alloc_map(size_t size, SceUID *uid, unsigned int *usse_off
 	if (sceGxmMapVertexUsseMemory(addr, size, usse_offset) < 0)
 		return NULL;
 
+	if (uid)
+		*uid = memuid;
+
 	return addr;
 }
 
@@ -1390,6 +1390,9 @@ void *gpu_fragment_usse_alloc_map(size_t size, SceUID *uid, unsigned int *usse_o
 
 	if (sceGxmMapFragmentUsseMemory(addr, size, usse_offset) < 0)
 		return NULL;
+
+	if (uid)
+		*uid = memuid;
 
 	return addr;
 }
