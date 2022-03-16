@@ -7,7 +7,6 @@
 #include <psp2/kernel/sysmem.h>
 #include "math_utils.h"
 #include "camera.h"
-#include "netlog.h"
 
 #define ALIGN(x, a) (((x) + ((a) - 1)) & ~((a) - 1))
 #define abs(x) (((x) < 0) ? -(x) : (x))
@@ -199,9 +198,6 @@ static void display_queue_callback(const void *callbackData);
 int main(int argc, char *argv[])
 {
 	int i;
-
-	netlog_init();
-	netlog("GXM fun by xerpi\n");
 
 	sceCtrlSetSamplingMode(SCE_CTRL_MODE_ANALOG);
 
@@ -1045,8 +1041,6 @@ int main(int argc, char *argv[])
 	sceGxmDestroyContext(gxm_context);
 
 	sceGxmTerminate();
-
-	netlog_fini();
 
 	return 0;
 }

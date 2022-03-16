@@ -23,7 +23,6 @@ set(SOURCES
 	source/main.c
 	source/camera.c
 	source/math_utils.c
-	source/netlog.c
 )
 
 set(VERTEX_SHADERS
@@ -102,6 +101,10 @@ add_custom_command(OUTPUT ${PROJECT_NAME}.vpk
 	COMMAND vita-mksfoex -s TITLE_ID=${TITLE_ID} "${TITLE_NAME}" param.sfo
 	COMMAND vita-pack-vpk -s param.sfo -b ${PROJECT_NAME}.self ${PROJECT_NAME}.vpk
 	DEPENDS ${PROJECT_NAME}.self
+)
+
+add_custom_target(velf
+        DEPENDS ${PROJECT_NAME}.velf
 )
 
 add_custom_target(vpksend
