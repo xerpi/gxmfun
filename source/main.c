@@ -226,7 +226,7 @@ int main(int argc, char *argv[])
 	unsigned int fragment_usse_offset;
 	fragment_usse_ring_buffer_addr = gpu_fragment_usse_alloc_map(
 		SCE_GXM_DEFAULT_FRAGMENT_USSE_RING_BUFFER_SIZE,
-		&fragment_ring_buffer_uid, &fragment_usse_offset);
+		&fragment_usse_ring_buffer_uid, &fragment_usse_offset);
 
 	SceGxmContextParams gxm_context_params;
 	memset(&gxm_context_params, 0, sizeof(gxm_context_params));
