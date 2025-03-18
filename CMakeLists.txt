@@ -1,15 +1,24 @@
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 3.10)
 
-set(CMAKE_SYSTEM_NAME "Generic")
-set(CMAKE_C_COMPILER "arm-vita-eabi-gcc")
-set(CMAKE_CXX_COMPILER "arm-vita-eabi-g++")
+if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
+  if(DEFINED ENV{VITASDK})
+    set(CMAKE_TOOLCHAIN_FILE "$ENV{VITASDK}/share/vita.toolchain.cmake" CACHE PATH "toolchain file")
+  else()
+    message(FATAL_ERROR "Please define VITASDK to point to your SDK path!")
+  endif()
+endif()
 
 project(gxmfun)
-set(TITLE_ID "GXMFUN000")
-set(TITLE_NAME "GXM Fun")
 
-set(CMAKE_C_FLAGS "-Wl,-q -Wall -O2")
-set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -std=c++11 -fno-rtti -fno-exceptions")
+include("${VITASDK}/share/vita.cmake" REQUIRED)
+
+set(VITA_APP_NAME "GXM Fun")
+set(VITA_TITLEID "GXMFUN000")
+set(VITA_VERSION  "01.00")
+
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+set(VITA_MKSFOEX_FLAGS "${VITA_MKSFOEX_FLAGS} -d PARENTAL_LEVEL=1")
 
 include_directories(
 	include
@@ -74,12 +83,12 @@ foreach(gxp ${SHADER_GXPS})
 	list(APPEND SHADER_OBJECTS "${gxp_we}_gxp.o")
 endforeach()
 
-add_executable(${PROJECT_NAME}.elf
+add_executable(${PROJECT_NAME}
 	${SOURCES}
 	${SHADER_OBJECTS}
 )
 
-target_link_libraries(${PROJECT_NAME}.elf
+target_link_libraries(${PROJECT_NAME}
 	-lm
 	SceDisplay_stub
 	SceGxm_stub
@@ -87,24 +96,11 @@ target_link_libraries(${PROJECT_NAME}.elf
 	SceSysmodule_stub
 )
 
-add_custom_command(OUTPUT ${PROJECT_NAME}.velf
-	COMMAND vita-elf-create ${PROJECT_NAME}.elf ${PROJECT_NAME}.velf
-	DEPENDS ${PROJECT_NAME}.elf
-)
+vita_create_self(${PROJECT_NAME}.self ${PROJECT_NAME})
 
-add_custom_command(OUTPUT ${PROJECT_NAME}.self
-	COMMAND vita-make-fself -c -s ${PROJECT_NAME}.velf ${PROJECT_NAME}.self
-	DEPENDS ${PROJECT_NAME}.velf
-)
-
-add_custom_command(OUTPUT ${PROJECT_NAME}.vpk
-	COMMAND vita-mksfoex -s TITLE_ID=${TITLE_ID} "${TITLE_NAME}" param.sfo
-	COMMAND vita-pack-vpk -s param.sfo -b ${PROJECT_NAME}.self ${PROJECT_NAME}.vpk
-	DEPENDS ${PROJECT_NAME}.self
-)
-
-add_custom_target(velf
-        DEPENDS ${PROJECT_NAME}.velf
+vita_create_vpk(${PROJECT_NAME}.vpk ${VITA_TITLEID} ${PROJECT_NAME}.self
+	VERSION ${VITA_VERSION}
+	NAME ${VITA_APP_NAME}
 )
 
 add_custom_target(vpksend
